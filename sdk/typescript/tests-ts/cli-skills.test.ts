@@ -53,9 +53,9 @@ describe("CLI skill commands", () => {
           "never",
           "--json",
           "--config",
-          'model="gpt-5.6-sol"',
+          'model="moonshotai/kimi-k3"',
           "--config",
-          'model_reasoning_effort="xhigh"',
+          'model_reasoning_effort="high"',
           "--config",
           'approval_policy="never"',
           "--sandbox",
@@ -94,7 +94,7 @@ describe("CLI skill commands", () => {
           "--effort <minimal|low|medium|high|xhigh>",
         );
         expect(help.text()).toContain("--codex <array>");
-        expect(help.text()).toContain('model="gpt-5.6-terra"');
+        expect(help.text()).toContain('model="moonshotai/kimi-k3"');
         expect(help.text()).toContain('model_reasoning_effort="high"');
         expect(help.text()).not.toContain("--provider");
       }
@@ -217,7 +217,7 @@ describe("CLI skill commands", () => {
             command,
             "a candidate finding",
             "--codex",
-            'model="gpt-5.6-custom"',
+            'model="moonshotai/custom-model"',
             "--codex",
             'model_reasoning_effort="high"',
           ],
@@ -231,7 +231,7 @@ describe("CLI skill commands", () => {
           }),
         ),
       ).toBe(0);
-      expect(invocation).toContain('model="gpt-5.6-custom"');
+      expect(invocation).toContain('model="moonshotai/custom-model"');
       expect(invocation).toContain('model_reasoning_effort="high"');
       expect(stderr.text()).toBe("");
     }
@@ -297,7 +297,7 @@ describe("CLI skill commands", () => {
             "--effort",
             "high",
             "--codex",
-            'model="gpt-5.6-terra"',
+            'model="moonshotai/kimi-k3"',
           ],
           capture().stream,
           stderr.stream,
@@ -309,7 +309,7 @@ describe("CLI skill commands", () => {
           }),
         ),
       ).toBe(0);
-      expect(invocation).toContain('model="gpt-5.6-terra"');
+      expect(invocation).toContain('model="moonshotai/kimi-k3"');
       expect(invocation).toContain('model_reasoning_effort="high"');
       expect(stderr.text()).toBe("");
 

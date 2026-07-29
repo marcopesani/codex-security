@@ -37,7 +37,6 @@ import {
   type ScanOptions,
   type ScanPreflight,
 } from "./api.js";
-import { accountStatus } from "./auth.js";
 import {
   createBulkScanDiscoveryDependencies,
   runBulkScanWizard,
@@ -245,7 +244,6 @@ interface CliDependencies {
     config: CodexSecurityConfig,
   ): Pick<CodexSecurity, "run" | "preflight" | "close">;
   environment: NodeJS.ProcessEnv;
-  hasStoredChatGPTSignIn?: () => Promise<boolean>;
   scanAuthenticationPrompt?: Pick<BulkScanPrompt, "isInteractive" | "select">;
   currentDirectory(): string;
   now(): number;
@@ -273,17 +271,6 @@ const DEFAULT_DEPENDENCIES: CliDependencies = {
   createSecurity: (config) => new CodexSecurity(config),
   environment: process.env,
   checkForUpdate: () => checkForUpdate({ environment: process.env }),
-  hasStoredChatGPTSignIn: async () => {
-    const environment = Object.fromEntries(
-      Object.entries(process.env).filter(
-        ([name]) =>
-          name.toUpperCase() !== "OPENAI_API_KEY" &&
-          name.toUpperCase() !== "CODEX_API_KEY",
-      ),
-    );
-    const status = await accountStatus(resolveCodexCommand(), environment);
-    return status.authenticated && /\bchatgpt\b/iu.test(status.details);
-  },
   currentDirectory: cwd,
   now: Date.now,
   setInterval: (callback, milliseconds) => setInterval(callback, milliseconds),
@@ -881,9 +868,9 @@ export async function main(
       options: z
         .object({
           auth: z
-            .enum(["auto", "chatgpt", "api-key"])
+            .enum(["auto", "api-key"])
             .default("auto")
-            .describe("Select automatic, ChatGPT, or API-key authentication."),
+            .describe("Select automatic or API-key authentication."),
           path: z
             .array(optionValue("--path"))
             .default([])
@@ -912,7 +899,7 @@ export async function main(
           model: optionValue("--model")
             .optional()
             .describe(
-              `OpenAI model to use (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
+              `OpenRouter model to use (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
             ),
           effort: effortOption(),
           outputDir: optionValue("--output-dir")
@@ -976,10 +963,13 @@ export async function main(
         ),
       examples: [
         { args: { repository: "." } },
-        { args: { repository: "." }, options: { model: "gpt-5.6-terra" } },
         {
           args: { repository: "." },
-          options: { model: "gpt-5.6-terra", effort: "high" },
+          options: { model: "moonshotai/kimi-k3" },
+        },
+        {
+          args: { repository: "." },
+          options: { model: "moonshotai/kimi-k3", effort: "high" },
         },
         { args: { repository: "." }, options: { path: ["src", "tests"] } },
         { args: { repository: "." }, options: { diff: "origin/main" } },
@@ -1131,7 +1121,7 @@ export async function main(
         model: optionValue("--model")
           .optional()
           .describe(
-            `OpenAI model for each repository (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
+            `OpenRouter model for each repository (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
           ),
         effort: effortOption(),
         maxAttempts: z
@@ -1332,7 +1322,7 @@ export async function main(
           .array(optionValue("--codex"))
           .default([])
           .describe(
-            'Set model="gpt-5.6-terra" or model_reasoning_effort="high".',
+            'Set model="moonshotai/kimi-k3" or model_reasoning_effort="high".',
           ),
       }),
       async run({ options }) {
@@ -1368,7 +1358,7 @@ export async function main(
           .array(optionValue("--codex"))
           .default([])
           .describe(
-            'Set model="gpt-5.6-terra" or model_reasoning_effort="high".',
+            'Set model="moonshotai/kimi-k3" or model_reasoning_effort="high".',
           ),
       }),
       async run({ options }) {
@@ -1386,92 +1376,6 @@ export async function main(
           exitCode = 2;
           errorOutput.write(`codex-security: ${cliErrorMessage(error)}\n`);
         }
-      },
-    })
-    .command("login", {
-      description: "Sign in with ChatGPT or store credentials.",
-      destructive: true,
-      mcp: false,
-      args: z.object({
-        action: z.enum(["status"]).optional().describe("Show login status."),
-      }),
-      options: z.object({
-        deviceAuth: z
-          .boolean()
-          .default(false)
-          .describe("Use device-code authentication."),
-        withApiKey: z
-          .boolean()
-          .default(false)
-          .describe("Read an API key from stdin."),
-        withAccessToken: z
-          .boolean()
-          .default(false)
-          .describe("Read an access token from stdin."),
-      }),
-      async run({ args, options }) {
-        exitCode = await dependencies.runCodex([
-          "login",
-          ...(args.action === undefined ? [] : [args.action]),
-          ...(options.deviceAuth ? ["--device-auth"] : []),
-          ...(options.withApiKey ? ["--with-api-key"] : []),
-          ...(options.withAccessToken ? ["--with-access-token"] : []),
-          "-c",
-          'cli_auth_credentials_store="file"',
-        ]);
-        if (args.action === "status") {
-          const authentication = scanAuthentication(dependencies.environment);
-          if (
-            authentication.method === "api_key" &&
-            (exitCode === 0 || exitCode === 1)
-          ) {
-            exitCode = 0;
-            errorOutput.write(
-              `Effective scan authentication: API key from ${authentication.source}.\n`,
-            );
-            errorOutput.write(
-              "To use a ChatGPT sign-in, unset OPENAI_API_KEY and CODEX_API_KEY.\n",
-            );
-          }
-        } else if (exitCode === 0 && !options.withApiKey) {
-          const authentication = scanAuthentication(dependencies.environment);
-          if (authentication.method === "api_key") {
-            const configuredApiKeyVariables = Object.entries(
-              dependencies.environment,
-            )
-              .filter(
-                ([name, value]) =>
-                  value?.trim() &&
-                  (name.toUpperCase() === "OPENAI_API_KEY" ||
-                    name.toUpperCase() === "CODEX_API_KEY"),
-              )
-              .map(([name]) => name);
-            const loginWarning = options.withAccessToken
-              ? `Access-token login succeeded, but noninteractive scans will use ${authentication.source}.\n`
-              : "ChatGPT login succeeded. Interactive scans will ask which account to use; " +
-                `noninteractive scans will use ${authentication.source}.\n`;
-            const storedCredentials = options.withAccessToken
-              ? "your stored credentials"
-              : "your ChatGPT sign-in";
-            errorOutput.write(
-              loginWarning +
-                `To use ${storedCredentials}, pass '--auth chatgpt' or run ` +
-                `'unset ${configuredApiKeyVariables.join(" ")}'.\n`,
-            );
-          }
-        }
-      },
-    })
-    .command("logout", {
-      description: "Remove the stored sign-in.",
-      destructive: true,
-      mcp: false,
-      async run() {
-        exitCode = await dependencies.runCodex([
-          "logout",
-          "-c",
-          'cli_auth_credentials_store="file"',
-        ]);
       },
     })
     .command("info", {
@@ -1708,8 +1612,6 @@ function validateCliArguments(
       "export",
       "validate",
       "patch",
-      "login",
-      "logout",
       "info",
     ].includes(value),
   );
@@ -1726,10 +1628,7 @@ function validateCliArguments(
           argv[index + 1] === "json" ||
           argv[index + 1] === "jsonl")),
   );
-  if (
-    structuredOutput &&
-    ["validate", "patch", "login", "logout"].includes(command)
-  ) {
+  if (structuredOutput && ["validate", "patch"].includes(command)) {
     return `${command} does not support noninteractive JSON output; run it without --json or --format json.`;
   }
   if (
@@ -1835,7 +1734,7 @@ function validateCliArguments(
     command !== "validate" &&
     command !== "patch" &&
     positionals.length >
-      (command === "logout" || command === "info"
+      (command === "info"
         ? 0
         : subcommand === "compare" || subcommand === "match"
           ? 2
@@ -2145,7 +2044,7 @@ export function skillCommandFailure(
       detail,
     )
   ) {
-    return "Authentication failed. Run codex-security login or check the configured API key.";
+    return "Authentication failed. Set OPENROUTER_API_KEY to a valid OpenRouter API key.";
   }
   if (
     /403|model.not.found|model.*access|access.*model|permission/iu.test(detail)
@@ -2333,43 +2232,8 @@ async function runScan(
           arguments_.effort,
         ),
     };
-    let auth = arguments_.auth;
+    const auth = arguments_.auth;
     selectedAuthentication = scanAuthentication(dependencies.environment, auth);
-    if (
-      (auth === undefined || auth === "auto") &&
-      !arguments_.dryRun &&
-      interactive &&
-      errorOutput.isTTY === true &&
-      selectedAuthentication.method === "api_key"
-    ) {
-      const prompt =
-        dependencies.scanAuthenticationPrompt ??
-        createBulkScanDiscoveryDependencies({
-          output: errorOutput,
-          now: dependencies.now,
-          currentDirectory: dependencies.currentDirectory,
-        }).prompt;
-      if (
-        prompt.isInteractive() &&
-        (await dependencies.hasStoredChatGPTSignIn?.()) === true
-      ) {
-        const source = selectedAuthentication.source;
-        errorOutput.write(
-          `Both a ChatGPT sign-in and an API key from ${source} are available.\n`,
-        );
-        auth = await prompt.select<ScanAuthMode>(
-          "How would you like to authenticate this scan?",
-          [
-            { label: "ChatGPT subscription", value: "chatgpt" },
-            { label: `API key from ${source}`, value: "api-key" },
-          ],
-        );
-        selectedAuthentication = scanAuthentication(
-          dependencies.environment,
-          auth,
-        );
-      }
-    }
     progress = new Progress(errorOutput, dependencies, interactive);
     const scope = scanScope(arguments_);
     const runningMessage = (): string =>
@@ -2419,9 +2283,6 @@ async function runScan(
         if (authentication.method === "api_key") {
           progress?.stage(
             `Authentication: API key from ${authentication.source}.`,
-          );
-          progress?.stage(
-            "To use your ChatGPT sign-in, retry with --auth chatgpt.",
           );
         } else {
           progress?.stage("Authentication: stored Codex credentials.");
@@ -2568,16 +2429,15 @@ function scanFailureMessage(
     case "unauthorized":
       return authentication?.method === "api_key"
         ? `Authentication failed using ${authentication.source}. ` +
-            "Your ChatGPT sign-in was not used. " +
-            "Retry with '--auth chatgpt' or provide a valid API key."
-        : "Authentication failed using stored ChatGPT credentials. " +
-            "Sign in again with 'codex-security login' or provide a valid API key.";
+            "Provide a valid OpenRouter API key."
+        : "Authentication failed. " +
+            "Set OPENROUTER_API_KEY to a valid OpenRouter API key.";
     case "forbidden":
       return authentication?.method === "api_key"
         ? `The API key from ${authentication.source} cannot access the configured model. ` +
-            "Retry with '--auth chatgpt' or use an API key with model access."
-        : "The stored ChatGPT credentials cannot access the configured model. " +
-            "Use an account or API key with model access.";
+            "Use an OpenRouter API key with model access."
+        : "The configured credentials cannot access the configured model. " +
+            "Use an OpenRouter API key with model access.";
     case "rate_limited":
       return "The configured account reached its rate limit. Wait and retry.";
     case "network_error":

@@ -444,9 +444,8 @@ describe("CLI", () => {
           env: {
             ...process.env,
             CODEX_HOME: join(root, "codex-home"),
-            CODEX_API_KEY: "",
             CODEX_SECURITY_HOOK_MARKER: maliciousMarker,
-            OPENAI_API_KEY: "",
+            OPENROUTER_API_KEY: "",
             PATH: [binaries, process.env["PATH"] ?? ""].join(delimiter),
           },
           timeout: 10_000,
@@ -487,7 +486,7 @@ describe("CLI", () => {
             "--mode",
             "deep",
             "--model",
-            "gpt-5.6-terra",
+            "moonshotai/kimi-k3",
             "--effort",
             "high",
             "--codex",
@@ -513,7 +512,7 @@ describe("CLI", () => {
       expect(config).toMatchObject({
         codexOverrides: {
           features: { goals: true },
-          model: "gpt-5.6-terra",
+          model: "moonshotai/kimi-k3",
           model_reasoning_effort: "high",
         },
       });
@@ -569,13 +568,13 @@ describe("CLI", () => {
   test("requires a terminal for interactive bulk scans", async () => {
     for (const argv of [
       ["bulk-scan"],
-      ["bulk-scan", "--model", "gpt-5.6-terra"],
-      ["bulk-scan", "--model=gpt-5.6-terra"],
+      ["bulk-scan", "--model", "moonshotai/kimi-k3"],
+      ["bulk-scan", "--model=moonshotai/kimi-k3"],
       ["bulk-scan", "--effort", "high"],
       ["bulk-scan", "--effort=high"],
       ["bulk-scan", "--codex", 'model_reasoning_effort="high"'],
       ["bulk-scan", '--codex=model_reasoning_effort="high"'],
-      ["bulk-scan", "--model", "gpt-5.6-terra", "--effort", "high"],
+      ["bulk-scan", "--model", "moonshotai/kimi-k3", "--effort", "high"],
     ] as const) {
       const stdout = capture();
       const stderr = capture();
@@ -659,8 +658,8 @@ describe("CLI", () => {
       cliVersion: VERSION,
       codexVersion: "0.144.6",
       codexSdkVersion: "0.144.6",
-      model: "gpt-5.6-sol",
-      reasoningEffort: "xhigh",
+      model: "moonshotai/kimi-k3",
+      reasoningEffort: "high",
       nextStep: "codex-security scan . --dry-run",
     });
   }, 30_000);
@@ -977,8 +976,8 @@ describe("CLI", () => {
       ),
     ).toBe(0);
     expect(JSON.parse(stdout.text())).toEqual({
-      model: "gpt-5.6-sol",
-      reasoningEffort: "xhigh",
+      model: "moonshotai/kimi-k3",
+      reasoningEffort: "high",
       nextStep: "codex-security scan . --dry-run",
     });
     expect(stderr.text()).toBe("");
@@ -1090,9 +1089,6 @@ describe("CLI", () => {
     for (const [command, arguments_] of [
       ["validate", ["finding", "--json"]],
       ["patch", ["issue", "--format", "json"]],
-      ["login", ["--json"]],
-      ["login", ["status", "--format", "jsonl"]],
-      ["logout", ["--json"]],
     ] as const) {
       let invoked = false;
       const stdout = capture();
@@ -1276,7 +1272,7 @@ describe("CLI", () => {
     expect(help.text()).toContain("--max-cost <number>");
     expect(help.text()).toContain("--model <string>");
     expect(help.text()).toContain(
-      `OpenAI model to use (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
+      `OpenRouter model to use (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
     );
     expect(help.text()).toContain("--effort <minimal|low|medium|high|xhigh>");
     expect(help.text()).toContain(
@@ -1284,10 +1280,10 @@ describe("CLI", () => {
     );
     expect(help.text()).toContain('model_reasoning_effort="high"');
     expect(help.text()).toContain(
-      "codex-security scan . --model gpt-5.6-terra",
+      "codex-security scan . --model moonshotai/kimi-k3",
     );
     expect(help.text()).toContain(
-      "codex-security scan . --model gpt-5.6-terra --effort high",
+      "codex-security scan . --model moonshotai/kimi-k3 --effort high",
     );
     expect(help.text()).not.toContain("--provider");
     expect(help.text()).not.toContain("openai:gpt");
@@ -1308,7 +1304,7 @@ describe("CLI", () => {
     ).toBe(0);
     expect(help.text()).toContain("--model <string>");
     expect(help.text()).toContain(
-      `OpenAI model for each repository (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
+      `OpenRouter model for each repository (default: ${DEFAULT_SCAN_MODEL_CONFIGURATION.model}).`,
     );
     expect(help.text()).toContain("--effort <minimal|low|medium|high|xhigh>");
     expect(help.text()).toContain(
@@ -1322,15 +1318,18 @@ describe("CLI", () => {
 
   test("selects scan models and reasoning without TOML quoting", async () => {
     for (const [options, expected] of [
-      [["--model", "gpt-5.6-terra"], { model: "gpt-5.6-terra" }],
-      [["--model=gpt-5.6-sol"], { model: "gpt-5.6-sol" }],
+      [["--model", "moonshotai/kimi-k3"], { model: "moonshotai/kimi-k3" }],
+      [
+        ["--model=moonshotai/custom-model"],
+        { model: "moonshotai/custom-model" },
+      ],
       [["--effort", "minimal"], { model_reasoning_effort: "minimal" }],
       [["--effort=xhigh"], { model_reasoning_effort: "xhigh" }],
       [
-        ["--model", "gpt-5.6-terra", "--effort", "high"],
-        { model: "gpt-5.6-terra", model_reasoning_effort: "high" },
+        ["--model", "moonshotai/kimi-k3", "--effort", "high"],
+        { model: "moonshotai/kimi-k3", model_reasoning_effort: "high" },
       ],
-      [["--codex", 'model="gpt-5.6-terra"'], { model: "gpt-5.6-terra" }],
+      [["--codex", 'model="moonshotai/kimi-k3"'], { model: "moonshotai/kimi-k3" }],
       [
         ["--codex", 'model_reasoning_effort="high"'],
         { model_reasoning_effort: "high" },
@@ -1338,15 +1337,15 @@ describe("CLI", () => {
       [
         [
           "--model",
-          "gpt-5.6-terra",
+          "moonshotai/kimi-k3",
           "--codex",
           'model_reasoning_effort="high"',
         ],
-        { model: "gpt-5.6-terra", model_reasoning_effort: "high" },
+        { model: "moonshotai/kimi-k3", model_reasoning_effort: "high" },
       ],
       [
-        ["--model", "gpt-5.6-terra", "--codex", "features.goals=true"],
-        { model: "gpt-5.6-terra", features: { goals: true } },
+        ["--model", "moonshotai/kimi-k3", "--codex", "features.goals=true"],
+        { model: "moonshotai/kimi-k3", features: { goals: true } },
       ],
     ] as const) {
       let config: CodexSecurityConfig | undefined;
@@ -1452,10 +1451,13 @@ describe("CLI", () => {
       parseCodexOverrides(["agents=4", "agents.max_threads=8"]),
     ).toThrow("Conflicting --codex key");
     expect(() =>
-      parseCodexOverrides(['model="gpt-5.6-sol"'], "gpt-5.6-terra"),
+      parseCodexOverrides(
+        ['model="moonshotai/custom-model"'],
+        "moonshotai/kimi-k3",
+      ),
     ).toThrow("--model conflicts with --codex model");
-    expect(parseCodexOverrides([], "gpt-5.6-terra", "high")).toEqual({
-      model: "gpt-5.6-terra",
+    expect(parseCodexOverrides([], "moonshotai/kimi-k3", "high")).toEqual({
+      model: "moonshotai/kimi-k3",
       model_reasoning_effort: "high",
     });
     expect(() =>
@@ -1570,9 +1572,9 @@ describe("CLI", () => {
           "scan",
           ".",
           "--model",
-          "gpt-5.6-terra",
+          "moonshotai/kimi-k3",
           "--codex",
-          'model="gpt-5.6-sol"',
+          'model="moonshotai/custom-model"',
         ],
         "--model conflicts with --codex model",
       ],
@@ -1777,7 +1779,10 @@ describe("CLI", () => {
 
   test("turns authentication and rate-limit failures into actionable safe messages", async () => {
     for (const [message, expected] of [
-      ["401 invalid API key for org-private", "provide a valid API key"],
+      [
+        "401 invalid API key for org-private",
+        "Set OPENROUTER_API_KEY to a valid OpenRouter API key",
+      ],
       ["403 model access denied for org-private", "model access"],
       ["429 rate limit reached for org-private", "rate limit"],
     ] as const) {
@@ -1903,7 +1908,7 @@ describe("CLI", () => {
     expect(stderr.text()).toContain(
       "Tokens: 1,250 input, 200 cached, 30 output.",
     );
-    expect(stderr.text()).toContain("Estimated cost: $0.00625 USD.");
+    expect(stderr.text()).toContain("Estimated cost: $0.00366 USD.");
     expect(stderr.text()).toContain(`Report: ${result.reportPath}`);
     expect(stderr.text()).toContain("Results: /tmp/scan");
     expect(stderr.text()).not.toContain("Next:");
@@ -2134,7 +2139,7 @@ describe("CLI", () => {
     expect(stderr.text()).toContain(
       "Tokens: 1,250 input, 200 cached, 30 output.",
     );
-    expect(stderr.text()).toContain("Estimated cost: $0.00625 USD.");
+    expect(stderr.text()).toContain("Estimated cost: $0.00366 USD.");
     expect(stderr.text()).toContain(`Report: ${result.reportPath}`);
     expect(stderr.text()).toContain("Results: /tmp/scan");
     expect(stderr.text()).not.toContain("Next:");
@@ -2158,7 +2163,7 @@ describe("CLI", () => {
       ),
     ).toBe(0);
     expect(JSON.parse(stdout.text())).toEqual(result.toJSON());
-    expect(stderr.text()).toContain("Estimated cost: $0.00625 of $0.01 limit");
+    expect(stderr.text()).toContain("Estimated cost: $0.00366 of $0.01 limit");
   });
 
   test("reports a scan stopped when its live cost exceeds the limit", async () => {
@@ -2184,7 +2189,7 @@ describe("CLI", () => {
     ).toBe(2);
     expect(stdout.text()).toBe("");
     expect(stderr.text()).toContain(
-      "Scan stopped: estimated cost $0.00625 exceeded the $0.005 limit; partial output remains at /tmp/scan.",
+      "Scan stopped: estimated cost $0.00366 exceeded the $0.005 limit; partial output remains at /tmp/scan.",
     );
   });
 
@@ -2198,7 +2203,7 @@ describe("CLI", () => {
 
     expect(
       await main(
-        ["scan", ".", "--json", "--max-cost", "0.00625"],
+        ["scan", ".", "--json", "--max-cost", "0.00366"],
         stdout.stream,
         capture().stream,
         dependencies({ result }),

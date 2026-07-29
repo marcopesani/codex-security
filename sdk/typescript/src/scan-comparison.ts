@@ -1,6 +1,3 @@
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import {
   Codex,
   type ModelReasoningEffort,
@@ -76,6 +73,11 @@ export async function matchScanFindings(
       env: comparisonEnvironment(options.environment),
       config: {
         allow_login_shell: false,
+        model_provider: "openrouter",
+        "model_providers.openrouter.name": "OpenRouter",
+        "model_providers.openrouter.base_url": "https://openrouter.ai/api/v1",
+        "model_providers.openrouter.env_key": "OPENROUTER_API_KEY",
+        "model_providers.openrouter.wire_api": "responses",
         "features.apps": false,
         "features.code_mode": false,
         "features.code_mode_only": false,
@@ -93,7 +95,7 @@ export async function matchScanFindings(
       },
     });
   const thread = codex.startThread({
-    ...(options.model === undefined ? {} : { model: options.model }),
+    model: options.model ?? "moonshotai/kimi-k3",
     modelReasoningEffort: options.reasoningEffort ?? "medium",
     sandboxMode: "read-only",
     approvalPolicy: "never",
@@ -137,27 +139,11 @@ function comparisonPrompt(input: ScanComparisonInput): string {
 function comparisonEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): Record<string, string> {
-  const environment = Object.fromEntries(
+  return Object.fromEntries(
     Object.entries(source).filter(
       (entry): entry is [string, string] => entry[1] !== undefined,
     ),
   );
-  const configuredHome = environment["CODEX_HOME"]?.trim();
-  const codexHome = configuredHome
-    ? configuredHome === "~"
-      ? homedir()
-      : configuredHome.startsWith("~/")
-        ? join(homedir(), configuredHome.slice(2))
-        : configuredHome
-    : join(homedir(), ".codex");
-  if (existsSync(join(codexHome, "auth.json"))) {
-    for (const key of Object.keys(environment)) {
-      if (["OPENAI_API_KEY", "CODEX_API_KEY"].includes(key.toUpperCase())) {
-        delete environment[key];
-      }
-    }
-  }
-  return environment;
 }
 
 function validateComparison(

@@ -97,6 +97,12 @@ describe("semantic scan comparison", () => {
     expect(calls.prompt).toContain(JSON.stringify(input));
   });
 
+  test("defaults thread model to moonshotai/kimi-k3", async () => {
+    const { codex, calls } = fakeCodex({ matches: [], uncertain: [] });
+    await matchScanFindings({ before: [], after: [] }, { codex });
+    expect(calls.threadOptions?.model).toBe("moonshotai/kimi-k3");
+  });
+
   test("rejects malformed model JSON", async () => {
     const { codex } = fakeCodex("not-json");
     await expect(
