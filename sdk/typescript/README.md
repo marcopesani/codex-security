@@ -26,9 +26,8 @@ notice. Notices are also disabled in CI and when stderr is not a terminal.
 
 ## Run a scan from TypeScript
 
-Sign in with `npx @openai/codex-security login` or set `OPENAI_API_KEY` or
-`CODEX_API_KEY`. Then create a client and scan a repository you own or have
-permission to assess:
+Set `OPENROUTER_API_KEY`, then create a client and scan a repository you own or
+have permission to assess:
 
 ```ts
 import { CodexSecurity } from "@openai/codex-security";
@@ -58,75 +57,27 @@ limit access to authorized reviewers.
 
 ## Authentication
 
-For local use, sign in with ChatGPT:
+Codex Security uses [OpenRouter](https://openrouter.ai/) as the model provider.
+Set `OPENROUTER_API_KEY` before scanning:
 
 ```bash
-npx @openai/codex-security login
+export OPENROUTER_API_KEY=...
 npx @openai/codex-security scan .
-```
-
-On a remote or headless machine, use device authentication:
-
-```bash
-npx @openai/codex-security login --device-auth
-```
-
-For CI, set `OPENAI_API_KEY` or `CODEX_API_KEY`. To store an API key instead,
-pass it on stdin:
-
-```bash
-printenv OPENAI_API_KEY | npx @openai/codex-security login --with-api-key
 ```
 
 On Windows, set the API key in PowerShell:
 
 ```powershell
-$env:OPENAI_API_KEY = "<your-api-key>"
+$env:OPENROUTER_API_KEY = "<your-api-key>"
 npx @openai/codex-security scan C:\code\repository
 ```
-
-Check or remove the stored sign-in with `npx @openai/codex-security login status` and
-`npx @openai/codex-security logout`. Codex Security reuses an existing file-based Codex
-sign-in. If Codex stores credentials in the system keyring, run
-`npx @openai/codex-security login` once before scanning.
-
-An environment API key takes precedence over a stored sign-in by default.
-When both a stored ChatGPT sign-in and an environment API key are available, an
-interactive scan asks which credential to use. JSON output, dry runs, CI, and
-other noninteractive scans never prompt and retain automatic API-key
-precedence. Select the credential source explicitly with `--auth`:
-
-```bash
-npx @openai/codex-security scan . --auth chatgpt
-npx @openai/codex-security scan . --auth api-key
-```
-
-`--auth chatgpt` uses the stored sign-in and ignores `OPENAI_API_KEY` and
-`CODEX_API_KEY`. `--auth api-key` requires one of those environment variables.
-Omit `--auth`, or pass `--auth auto`, to preserve automatic API-key precedence
-for existing CI and unattended scans. The SDK accepts the same selection as
-`security.run(repository, { auth: "chatgpt" })` and
-`security.preflight(repository, { auth: "chatgpt" })`.
-
-To make the stored ChatGPT sign-in the automatic default instead, unset any
-configured API-key variables:
-
-```bash
-unset OPENAI_API_KEY CODEX_API_KEY
-```
-
-The interactive choice applies only to the current scan and is not persisted.
-
-When an environment key is configured, ChatGPT login and
-`codex-security login status` identify the effective scan credential source
-without printing its value, including when no stored sign-in exists.
 
 ## CLI
 
 ```bash
 npx @openai/codex-security scan /path/to/repository
-npx @openai/codex-security scan /path/to/repository --model gpt-5.6-terra
-npx @openai/codex-security scan /path/to/repository --model gpt-5.6-terra --effort high
+npx @openai/codex-security scan /path/to/repository --model moonshotai/kimi-k3
+npx @openai/codex-security scan /path/to/repository --model moonshotai/kimi-k3 --effort high
 npx @openai/codex-security scan /path/to/repository --path src --path tests
 npx @openai/codex-security scan /path/to/repository --knowledge-base /path/to/threat-models --knowledge-base /path/to/architecture.pdf
 npx @openai/codex-security scan /path/to/repository --diff origin/main --json
@@ -137,7 +88,7 @@ npx @openai/codex-security scan /path/to/repository --fail-on-severity high
 npx @openai/codex-security scan /path/to/repository --max-cost 5
 npx @openai/codex-security install-hook
 npx @openai/codex-security bulk-scan
-npx @openai/codex-security bulk-scan --model gpt-5.6-terra --effort high
+npx @openai/codex-security bulk-scan --model moonshotai/kimi-k3 --effort high
 npx @openai/codex-security bulk-scan repositories.csv --output-dir /path/outside/repositories/security-scans --workers 4
 npx @openai/codex-security scans list /path/to/repository
 npx @openai/codex-security scans list --scan-root /path/outside/repository/results
@@ -191,8 +142,8 @@ for a passing policy. Incomplete scans still write the available human or JSON
 result to stdout and a coverage warning to stderr, including in report-only
 mode.
 
-Scans use `gpt-5.6-sol` with extra-high reasoning effort by default. OpenAI is
-the implied provider. Use `--model gpt-5.6-terra` to switch models and
+Scans use OpenRouter with `moonshotai/kimi-k3` and extra-high reasoning effort
+by default. Use `--model moonshotai/kimi-k3` to set the model explicitly and
 `--effort minimal|low|medium|high|xhigh` to set reasoning effort. Repeat
 `--codex KEY=VALUE` for other Codex settings; existing
 `--codex 'model_reasoning_effort="high"'` overrides remain supported.
@@ -304,9 +255,9 @@ npx @openai/codex-security scan . \
 ```
 
 JSON scans never use interactive terminal controls, even when stderr is a TTY.
-The `validate`, `patch`, `login`, and `logout` commands reject `--json` because
-they do not produce structured CLI output. Sign-in commands remain interactive.
-CSV exports cannot be written to stdout while JSON output is requested.
+The `validate` and `patch` commands reject `--json` because they do not produce
+structured CLI output. CSV exports cannot be written to stdout while JSON
+output is requested.
 
 Use `export` to create CSV, JSON, or SARIF from a completed, sealed scan without
 starting Codex or loading credentials. JSON preserves the sealed findings
@@ -322,8 +273,8 @@ input can be either a file, whose contents are read into the request, or literal
 text. Both commands operate on the current directory, use the scan model
 and reasoning defaults, ignore unrelated user configuration and plugins, and
 print the final response without the underlying Codex event stream. Override
-the model with `--codex 'model="gpt-5.6-sol"'` and the reasoning effort with
-`--effort high` or `--codex 'model_reasoning_effort="high"'`. Inputs are
+the model with `--codex 'model="moonshotai/kimi-k3"'` and the reasoning effort
+with `--effort high` or `--codex 'model_reasoning_effort="high"'`. Inputs are
 limited to 64 items and 1 MiB total.
 
 Canonical scan documents are limited to 16 MiB for the manifest, 128 MiB for
@@ -341,8 +292,6 @@ method and, for an environment API key, its variable name. Authentication and
 model access remain unverified until a real scan starts.
 
 Scan progress identifies the selected credential source before Codex starts.
-Terminals and noninteractive CI logs also show how to retry with
-`--auth chatgpt` when an environment API key overrides the stored sign-in.
 Progress remains on stderr so JSON output stays machine readable. Network
 failures and rate limits remain retryable; definitive authentication and model
 authorization failures stop immediately.

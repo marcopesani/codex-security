@@ -11,11 +11,10 @@ services:
       - no-new-privileges:true
       - seccomp=${CODEX_SECURITY_SECCOMP:-./docker/codex-security-seccomp.json}
     environment:
-      CODEX_API_KEY:
       CODEX_SECURITY_GIT_HOST:
       GH_TOKEN:
       GITHUB_TOKEN:
-      OPENAI_API_KEY:
+      OPENROUTER_API_KEY:
     volumes:
       - type: bind
         source: ${CODEX_SECURITY_CSV:-./repositories.csv}

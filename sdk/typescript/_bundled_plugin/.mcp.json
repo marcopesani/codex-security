@@ -7,7 +7,7 @@
       "env_vars": [
         "CODEX_HOME",
         "CODEX_SQLITE_HOME",
-        "CODEX_API_KEY",
+        "OPENROUTER_API_KEY",
         "CODEX_CLI_PATH",
         "PYTHON",
         "CODEX_SECURITY_KNOWLEDGE_BASE",

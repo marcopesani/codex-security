@@ -4,35 +4,18 @@
 
 **See the [Codex Security Documentation](http://learn.chatgpt.com/docs/security/cli)** for more details.
 
-> Note: for best results, we recommend that your account is verified for [Trusted Access](https://chatgpt.com/cyber).
+Scans use [OpenRouter](https://openrouter.ai/) as the model provider, with
+`moonshotai/kimi-k3` as the default model.
 
 ## Quick start
 
-Requires Node.js 22 or later, Python 3.10 or later, and access to Codex Security.
+Requires Node.js 22 or later, Python 3.10 or later, and an OpenRouter API key.
 
 ```bash
 npm install @openai/codex-security
-npx @openai/codex-security login
+export OPENROUTER_API_KEY=...
 npx @openai/codex-security scan .
-npx @openai/codex-security scan . --model gpt-5.6-terra --effort high
-```
-
-For CI, set `OPENAI_API_KEY` instead of signing in.
-
-If both a ChatGPT sign-in and an API key are available, interactive scans ask
-which credential to use. CI and other noninteractive scans keep the existing
-API-key precedence. Select a credential explicitly when needed:
-
-```bash
-npx @openai/codex-security scan . --auth chatgpt
-npx @openai/codex-security scan . --auth api-key
-```
-
-To make your ChatGPT sign-in the automatic default, unset any configured API
-keys:
-
-```bash
-unset OPENAI_API_KEY CODEX_API_KEY
+npx @openai/codex-security scan . --model moonshotai/kimi-k3 --effort high
 ```
 
 Scan history is stored in the Codex Security workbench state directory. If that

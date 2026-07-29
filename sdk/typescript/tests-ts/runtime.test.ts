@@ -925,8 +925,7 @@ describe("runtime directories and plugin Python boundary", () => {
         "assert sys.flags.isolated",
         "assert sys.dont_write_bytecode",
         "assert sys.argv[1] == 'test-command'",
-        "assert os.environ.get('OPENAI_API_KEY') is None",
-        "assert os.environ.get('CODEX_API_KEY') is None",
+        "assert os.environ.get('OPENROUTER_API_KEY') is None",
         "print(json.dumps({'ok': True}))",
       ].join("\n"),
     );
@@ -938,8 +937,7 @@ describe("runtime directories and plugin Python boundary", () => {
         pluginRoot,
         environment: {
           PATH: process.env["PATH"],
-          OPENAI_API_KEY: "must-not-reach-python",
-          CODEX_API_KEY: "also-must-not-reach-python",
+          OPENROUTER_API_KEY: "must-not-reach-python",
         },
       },
       ["test-command"],
