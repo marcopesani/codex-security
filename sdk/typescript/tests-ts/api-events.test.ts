@@ -32,16 +32,16 @@ describe("one-shot scan events", () => {
     expect(result.threadId).toBe("thread-1");
     expect(result.turnResult).toMatchObject({
       status: "completed",
-      model: "gpt-5.6-sol",
+      model: "moonshotai/kimi-k3",
       finalResponse: "scan complete",
     });
     expect(result.cost).toEqual({
-      model: "gpt-5.6-sol",
+      model: "moonshotai/kimi-k3",
       inputTokens: 10,
       cachedInputTokens: 2,
       cacheWriteInputTokens: 0,
       outputTokens: 3,
-      estimatedUsd: 0.000131,
+      estimatedUsd: 0.0000696,
     });
   });
 

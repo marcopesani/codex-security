@@ -87,7 +87,7 @@ export function runEvents(
     signal: abortController.signal,
     scanDir,
     pluginRoot: PLUGIN_ROOT,
-    model: "gpt-5.6-sol",
+    model: "moonshotai/kimi-k3",
     onScanStarted,
     onReconnect,
     onWorkerStatus,

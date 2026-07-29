@@ -2,16 +2,10 @@
 
 import { chmod, lstat, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { Codex, type CodexOptions } from "@openai/codex-sdk";
-import {
-  accountStatus,
-  CodexLoginHandle,
-  loginApiKey as persistApiKey,
-  logout as codexLogout,
-  type AccountStatus,
-} from "./auth.js";
+import type { AccountStatus } from "./auth.js";
 import {
   mergedCodexConfig,
   scanModelConfiguration,
@@ -51,17 +45,14 @@ import {
   cleanupSdkDirectory,
   codexSecurityStateDirectory,
   createIsolatedHome,
-  importAmbientAuth,
   pluginExecutionEnvironment,
   planOutputArchive,
   prepareOutputDir,
   preparePersistentScanRoot,
   requireModelSafeOutputDir,
-  resolveCodexCommand,
   resolvePluginPath,
   resolvePluginPython,
   runWorkbench,
-  type CodexCommand,
   type PluginInstall,
   type ProcessEnvironment,
   type WorkbenchCommandOptions,
@@ -138,12 +129,12 @@ export interface ScanOptions {
   signal?: AbortSignal;
 }
 
-export type ScanAuthMode = "auto" | "chatgpt" | "api-key";
+export type ScanAuthMode = "auto" | "api-key";
 
 export type ScanAuthentication =
   | {
       method: "api_key";
-      source: "OPENAI_API_KEY" | "CODEX_API_KEY";
+      source: "OPENROUTER_API_KEY";
       verified: false;
     }
   | {
@@ -201,7 +192,6 @@ interface ClientDependencies {
   resolvePluginPython?: typeof resolvePluginPython;
   prepareOutputDir?: typeof prepareOutputDir;
   repositoryRevision?: typeof repositoryRevision;
-  resolveCodexCommand?: () => CodexCommand;
   runWorkbench?: typeof runWorkbench;
 }
 
@@ -222,12 +212,10 @@ export class CodexSecurity {
   };
 
   readonly #dependencies: ClientDependencies;
-  readonly #loginHandles = new Set<CodexLoginHandle>();
   readonly #abortController = new AbortController();
   #activeOperation: Promise<unknown> | null = null;
   #runtimePromise: Promise<PreparedRuntime> | null = null;
   #runtime: PreparedRuntime | null = null;
-  #runtimeCredentialSource: "api_key" | "stored_credentials" | null = null;
   #closed = false;
   #closePromise: Promise<void> | null = null;
 
@@ -355,16 +343,8 @@ export class CodexSecurity {
         this.#dependencies.environment,
         options.auth,
       );
-      const scanEnvironment = selectedScanEnvironment(
-        this.#dependencies.environment,
-        options.auth,
-      );
-      const runtime = await this.#ensureRuntime(
-        signal,
-        temporaryRoot,
-        (path) =>
-          requireOutputOutsideRepository(protectedRoot, path, "runtime"),
-        options.auth,
+      const runtime = await this.#ensureRuntime(signal, temporaryRoot, (path) =>
+        requireOutputOutsideRepository(protectedRoot, path, "runtime"),
       );
       const runtimeHome = await realpath(runtime.codexHome);
       requireOutputOutsideRepository(protectedRoot, runtimeHome, "runtime");
@@ -377,46 +357,15 @@ export class CodexSecurity {
         );
       }
       checkOpen();
-      if (
-        authentication.method === "stored_credentials" &&
-        this.#runtimeCredentialSource === "api_key"
-      ) {
-        const ambientHome =
-          environmentValue(this.#dependencies.environment, "CODEX_HOME") ??
-          join(homedir(), ".codex");
-        runtime.credentialsAvailable = await importAmbientAuth(
-          ambientHome,
-          runtime.codexHome,
-        );
-        this.#runtimeCredentialSource = runtime.credentialsAvailable
-          ? "stored_credentials"
-          : null;
-      }
-      const apiKey =
-        authentication.method === "api_key"
-          ? environmentApiKey(this.#dependencies.environment)
-          : null;
-      if (apiKey !== null) {
-        const codexCommand = this.#codexCommand();
-        const login = await persistApiKey(
-          codexCommand,
-          runtime.environment,
-          apiKey,
-          signal,
-        );
-        if (!login.success) {
-          throw new CodexSecurityError(
-            `Codex API-key login failed: ${login.stderr.trim() || login.stdout.trim() || "unknown error"}`,
-          );
-        }
+      // Codex reads the OpenRouter key from the process environment via the
+      // provider's env_key; no credential persistence step is needed.
+      if (environmentApiKey(this.#dependencies.environment) !== null) {
         runtime.credentialsAvailable = true;
-        this.#runtimeCredentialSource = "api_key";
       }
       if (!runtime.credentialsAvailable) {
         throw new AuthenticationRequiredError(
-          "No credentials were found. Run 'codex-security login', use " +
-            "'codex-security login --device-auth' on a remote or headless machine, or set " +
-            "OPENAI_API_KEY or CODEX_API_KEY for CI.",
+          "No OpenRouter API key was found. Set the OPENROUTER_API_KEY " +
+            "environment variable to run Codex Security scans.",
         );
       }
       notifyObserver(
@@ -429,7 +378,7 @@ export class CodexSecurity {
         this.#dependencies.resolvePluginPython ?? resolvePluginPython
       )({
         configuredPath: this.config.pythonPath,
-        environment: scanEnvironment,
+        environment: this.#dependencies.environment,
         protectedRoot,
         signal,
       });
@@ -543,7 +492,7 @@ export class CodexSecurity {
         python,
         pluginRoot: runtime.plugin.pluginRoot,
         environment: {
-          ...selectedScanEnvironment(runtime.environment, options.auth),
+          ...runtime.environment,
           CODEX_SECURITY_STATE_DIR: stateDirectory,
         },
         signal,
@@ -655,9 +604,7 @@ export class CodexSecurity {
       const environment = {
         ...pluginExecutionEnvironment(
           python,
-          withoutCodexHome(
-            selectedScanEnvironment(runtime.environment, options.auth),
-          ),
+          withoutCodexHome(runtime.environment),
         ),
         CODEX_HOME: runtime.codexHome,
         ...runtimePaths,
@@ -785,95 +732,20 @@ export class CodexSecurity {
     }
   }
 
-  public async loginApiKey(apiKey: string): Promise<void> {
-    const { result, runtime } = await this.#runOperation(
-      async (preparedRuntime, signal) => ({
-        runtime: preparedRuntime,
-        result: await persistApiKey(
-          this.#codexCommand(),
-          preparedRuntime.environment,
-          apiKey,
-          signal,
-        ),
-      }),
-    );
-    if (!result.success) {
-      throw new CodexSecurityError(
-        `Codex API-key login failed: ${result.stderr.trim() || result.stdout.trim() || "unknown error"}`,
-      );
-    }
-    runtime.credentialsAvailable = true;
-    this.#runtimeCredentialSource = "api_key";
-  }
-
-  public async loginChatGPT(): Promise<CodexLoginHandle> {
-    const runtime = await this.#ensureRuntime();
-    this.#requireOpen();
-    const handle = this.#trackLoginHandle(
-      new CodexLoginHandle(
-        this.#codexCommand(),
-        ["login"],
-        runtime.environment,
-        () => {
-          runtime.credentialsAvailable = true;
-          this.#runtimeCredentialSource = "stored_credentials";
-        },
-      ),
-    );
-    await handle.waitForInstructions();
-    this.#requireOpen();
-    return handle;
-  }
-
-  public async loginChatGPTDeviceCode(): Promise<CodexLoginHandle> {
-    const runtime = await this.#ensureRuntime();
-    this.#requireOpen();
-    const handle = this.#trackLoginHandle(
-      new CodexLoginHandle(
-        this.#codexCommand(),
-        ["login", "--device-auth"],
-        runtime.environment,
-        () => {
-          runtime.credentialsAvailable = true;
-          this.#runtimeCredentialSource = "stored_credentials";
-        },
-      ),
-    );
-    await handle.waitForInstructions({ deviceCode: true });
-    this.#requireOpen();
-    return handle;
-  }
-
   public async account(): Promise<AccountStatus> {
-    return await this.#runOperation(async (runtime, signal) => {
+    return await this.#runOperation(async () => {
       const apiKey = environmentApiKey(this.#dependencies.environment);
-      if (apiKey !== null) {
-        return {
-          authenticated: true,
-          details: "Authenticated with an API key.",
-        };
-      }
-      return await accountStatus(
-        this.#codexCommand(),
-        runtime.environment,
-        signal,
-      );
+      return apiKey !== null
+        ? {
+            authenticated: true,
+            details: "Authenticated with an API key from OPENROUTER_API_KEY.",
+          }
+        : {
+            authenticated: false,
+            details:
+              "Not authenticated. Set the OPENROUTER_API_KEY environment variable.",
+          };
     });
-  }
-
-  public async logout(): Promise<void> {
-    const runtime = await this.#runOperation(
-      async (preparedRuntime, signal) => {
-        await codexLogout(
-          this.#codexCommand(),
-          preparedRuntime.environment,
-          signal,
-        );
-        return preparedRuntime;
-      },
-    );
-    runtime.credentialsAvailable = false;
-    this.#runtimeCredentialSource = null;
   }
 
   public async close(): Promise<void> {
@@ -885,20 +757,15 @@ export class CodexSecurity {
 
   async #finishClose(): Promise<void> {
     const activeOperation = this.#activeOperation;
-    const loginHandles = [...this.#loginHandles];
     if (
       activeOperation !== null ||
-      loginHandles.length > 0 ||
       (this.#runtime === null && this.#runtimePromise !== null)
     ) {
       this.#abortController.abort();
     }
-    for (const handle of loginHandles) handle.cancel();
-    await Promise.allSettled(
-      [activeOperation, ...loginHandles.map((handle) => handle.wait())].filter(
-        (operation): operation is Promise<unknown> => operation !== null,
-      ),
-    );
+    if (activeOperation !== null) {
+      await Promise.allSettled([activeOperation]);
+    }
     const runtime =
       this.#runtime ?? (await this.#runtimePromise?.catch(() => null));
     this.#runtime = null;
@@ -954,7 +821,6 @@ export class CodexSecurity {
     signal?: AbortSignal,
     temporaryRoot?: string,
     validateLocation?: (path: string) => void,
-    auth: ScanAuthMode = "auto",
   ): Promise<PreparedRuntime> {
     this.#requireOpen();
     if (this.#runtime !== null) return this.#runtime;
@@ -963,7 +829,6 @@ export class CodexSecurity {
         signal ?? this.#abortController.signal,
         temporaryRoot,
         validateLocation,
-        auth,
       );
       this.#runtimePromise = runtimePromise;
       void runtimePromise.catch(() => {
@@ -975,23 +840,7 @@ export class CodexSecurity {
     const runtime = await this.#runtimePromise;
     this.#requireOpen();
     this.#runtime = runtime;
-    this.#runtimeCredentialSource = runtime.credentialsAvailable
-      ? "stored_credentials"
-      : null;
     return this.#runtime;
-  }
-
-  #trackLoginHandle(handle: CodexLoginHandle): CodexLoginHandle {
-    this.#loginHandles.add(handle);
-    void handle.wait().then(
-      () => this.#loginHandles.delete(handle),
-      () => this.#loginHandles.delete(handle),
-    );
-    return handle;
-  }
-
-  #codexCommand(): CodexCommand {
-    return (this.#dependencies.resolveCodexCommand ?? resolveCodexCommand)();
   }
 
   async #validateLocalInputs(
@@ -1038,7 +887,6 @@ export class CodexSecurity {
     signal: AbortSignal,
     temporaryRoot?: string,
     validateLocation?: (path: string) => void,
-    auth: ScanAuthMode = "auto",
   ): Promise<PreparedRuntime> {
     if (this.#dependencies.prepareRuntime !== undefined) {
       return await this.#dependencies.prepareRuntime(this.config, signal);
@@ -1056,16 +904,7 @@ export class CodexSecurity {
         bootstrapWorkspace,
         signal,
       );
-      const processEnvironment = selectedScanEnvironment(
-        this.#dependencies.environment,
-        auth,
-      );
-      const nodeAmbientHome = join(homedir(), ".codex");
-      const configuredAmbientHome = environmentValue(
-        processEnvironment,
-        "CODEX_HOME",
-      );
-      const ambientHome = configuredAmbientHome ?? nodeAmbientHome;
+      const processEnvironment = this.#dependencies.environment;
       const mergedConfig = await mergedCodexConfig(this.config);
       const codexConfig = scanRuntimeCodexConfig(
         mergedConfig,
@@ -1082,11 +921,7 @@ export class CodexSecurity {
         environment: withoutCodexHome(processEnvironment),
         signal,
       });
-      const credentialsAvailable = await initialCredentialsAvailable(
-        processEnvironment,
-        ambientHome,
-        codexHome,
-      );
+      const credentialsAvailable = environmentApiKey(processEnvironment) !== null;
       return {
         codexHome,
         bootstrapWorkspace,
@@ -1124,16 +959,6 @@ export class CodexSecurity {
   #requireOpen(): void {
     if (this.#closed) throw new CodexSecurityError("CodexSecurity is closed.");
   }
-}
-
-export async function initialCredentialsAvailable(
-  environment: ProcessEnvironment,
-  ambientHome: string,
-  isolatedHome: string,
-  importer: typeof importAmbientAuth = importAmbientAuth,
-): Promise<boolean> {
-  if (environmentApiKey(environment) !== null) return false;
-  return await importer(ambientHome, isolatedHome);
 }
 
 async function removeTargetPathsFile(path: string | null): Promise<void> {
@@ -1468,33 +1293,16 @@ export function scanAuthentication(
   environment: ProcessEnvironment,
   auth: ScanAuthMode = "auto",
 ): ScanAuthentication {
-  if (auth === "chatgpt") {
-    return { method: "stored_credentials", verified: false };
-  }
   const key = environmentApiKeyEntry(environment);
   if (auth === "api-key" && key === null) {
     throw new AuthenticationRequiredError(
-      "API-key authentication requires OPENAI_API_KEY or CODEX_API_KEY. " +
-        "Set a valid API key or use '--auth chatgpt'.",
+      "API-key authentication requires OPENROUTER_API_KEY. " +
+        "Set a valid OpenRouter API key in the environment.",
     );
   }
   return key === null
     ? { method: "stored_credentials", verified: false }
     : { method: "api_key", source: key.source, verified: false };
-}
-
-function selectedScanEnvironment(
-  environment: ProcessEnvironment,
-  auth: ScanAuthMode = "auto",
-): ProcessEnvironment {
-  if (auth !== "chatgpt") return environment;
-  return Object.fromEntries(
-    Object.entries(environment).filter(
-      ([name]) =>
-        name.toUpperCase() !== "OPENAI_API_KEY" &&
-        name.toUpperCase() !== "CODEX_API_KEY",
-    ),
-  );
 }
 
 function notifyObserver<Arguments extends unknown[]>(
@@ -1516,16 +1324,14 @@ function environmentApiKey(environment: ProcessEnvironment): string | null {
 }
 
 function environmentApiKeyEntry(environment: ProcessEnvironment): {
-  source: "OPENAI_API_KEY" | "CODEX_API_KEY";
+  source: "OPENROUTER_API_KEY";
   value: string;
 } | null {
-  for (const requested of ["OPENAI_API_KEY", "CODEX_API_KEY"] as const) {
-    const canonical = environment[requested]?.trim();
-    if (canonical) return { source: requested, value: canonical };
-    for (const [name, value] of Object.entries(environment)) {
-      if (name.toUpperCase() === requested && value?.trim())
-        return { source: requested, value: value.trim() };
-    }
+  const canonical = environment["OPENROUTER_API_KEY"]?.trim();
+  if (canonical) return { source: "OPENROUTER_API_KEY", value: canonical };
+  for (const [name, value] of Object.entries(environment)) {
+    if (name.toUpperCase() === "OPENROUTER_API_KEY" && value?.trim())
+      return { source: "OPENROUTER_API_KEY", value: value.trim() };
   }
   return null;
 }
@@ -1655,6 +1461,61 @@ export function scanPreflightCodexConfig(config: JsonObject): JsonObject {
     Number.isSafeInteger(value) &&
     value >= 0 &&
     value <= 1_000_000;
+  const safeHttpsUrl = (value: unknown): value is string => {
+    if (
+      typeof value !== "string" ||
+      value.length === 0 ||
+      value.length > 2_048 ||
+      /[\u0000-\u001f\u007f\s]/u.test(value)
+    ) {
+      return false;
+    }
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      return false;
+    }
+    return (
+      url.protocol === "https:" && url.username === "" && url.password === ""
+    );
+  };
+  // Model providers carry no secrets themselves (the key stays in the
+  // environment behind env_key), so this dedicated projection intentionally
+  // bypasses the generic safeString filter that rejects "api_key"/"env".
+  const modelProviders = (value: unknown): JsonObject => {
+    if (!isRecord(value)) return {};
+    const sanitized: JsonObject = {};
+    for (const [id, provider] of Object.entries(value).slice(0, 16)) {
+      if (!/^[A-Za-z0-9_-]{1,64}$/u.test(id) || !isRecord(provider)) continue;
+      const projected: JsonObject = {};
+      const name = provider["name"];
+      if (
+        typeof name === "string" &&
+        name.length > 0 &&
+        name.length <= 64 &&
+        !/[\u0000-\u001f\u007f]/u.test(name)
+      ) {
+        projected["name"] = name;
+      }
+      const baseUrl = provider["base_url"];
+      if (safeHttpsUrl(baseUrl)) projected["base_url"] = baseUrl;
+      const envKey = provider["env_key"];
+      if (
+        typeof envKey === "string" &&
+        envKey.length <= 128 &&
+        /^[A-Z][A-Z0-9_]*$/u.test(envKey)
+      ) {
+        projected["env_key"] = envKey;
+      }
+      const wireApi = provider["wire_api"];
+      if (wireApi === "chat" || wireApi === "responses") {
+        projected["wire_api"] = wireApi;
+      }
+      if (Object.keys(projected).length > 0) sanitized[id] = projected;
+    }
+    return sanitized;
+  };
   const capabilityFeatures = (value: unknown): JsonObject => {
     if (!isRecord(value)) return {};
     const result: JsonObject = {};
@@ -1711,6 +1572,10 @@ export function scanPreflightCodexConfig(config: JsonObject): JsonObject {
   };
 
   const result = executionConfig(config);
+  const providers = modelProviders(config["model_providers"]);
+  if (Object.keys(providers).length > 0) {
+    result["model_providers"] = providers;
+  }
   if (safeProfileName(config["profile"])) {
     result["profile"] = config["profile"];
   }

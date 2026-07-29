@@ -10,7 +10,6 @@ export type {
   ScanReconnectDetails,
 } from "./api.js";
 export type { ScanWorkerPhase, ScanWorkerStatus } from "./worker-progress.js";
-export { CodexLoginHandle } from "./auth.js";
 export type { AccountStatus, LoginResult } from "./auth.js";
 
 export {

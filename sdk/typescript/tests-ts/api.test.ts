@@ -35,7 +35,6 @@ import {
 import {
   classifyConnectionFailure,
   environmentValue,
-  initialCredentialsAvailable,
   scanPreflightCodexConfig,
   scanRuntimeCodexConfig,
 } from "../src/api.js";
@@ -253,8 +252,31 @@ describe("CodexSecurity orchestration", () => {
     );
     await mkdir(repository);
     const sanitized = scanPreflightCodexConfig({
-      model: "gpt-5.6-sol",
+      model: "moonshotai/kimi-k3",
       model_reasoning_effort: "high",
+      model_provider: "openrouter",
+      model_providers: {
+        openrouter: {
+          name: "OpenRouter",
+          base_url: "https://openrouter.ai/api/v1",
+          env_key: "OPENROUTER_API_KEY",
+          wire_api: "chat",
+          api_key: "PROVIDER_SECRET",
+          http_headers: { Authorization: "PROVIDER_HEADER_SECRET" },
+        },
+        "bad provider id!": {
+          base_url: "https://example.test/v1",
+        },
+        insecure: {
+          name: "Insecure",
+          base_url: "http://plaintext.example.test/v1",
+          env_key: "lowercase_key",
+          wire_api: "grpc",
+        },
+        leaky: {
+          base_url: "https://user:PROVIDER_URL_SECRET@example.test/v1",
+        },
+      },
       features: {
         plugins: true,
         goals: true,
@@ -295,8 +317,18 @@ describe("CodexSecurity orchestration", () => {
       shell_environment_policy: { set: { SECRET: "SHELL_SECRET" } },
     });
     expect(sanitized).toEqual({
-      model: "gpt-5.6-sol",
+      model: "moonshotai/kimi-k3",
       model_reasoning_effort: "high",
+      model_provider: "openrouter",
+      model_providers: {
+        openrouter: {
+          name: "OpenRouter",
+          base_url: "https://openrouter.ai/api/v1",
+          env_key: "OPENROUTER_API_KEY",
+          wire_api: "chat",
+        },
+        insecure: { name: "Insecure" },
+      },
       features: { goals: true, multi_agent_v2: { enabled: false } },
       agents: { max_threads: 12, max_depth: 2 },
       profile: "review",
@@ -326,9 +358,29 @@ describe("CodexSecurity orchestration", () => {
       "PROJECT_TOKEN",
       "MCP_TOKEN",
       "SHELL_SECRET",
+      "PROVIDER_SECRET",
+      "PROVIDER_HEADER_SECRET",
+      "PROVIDER_URL_SECRET",
     ]) {
       expect(serialized).not.toContain(secret);
     }
+    expect(
+      scanPreflightCodexConfig({
+        model_providers: Object.fromEntries(
+          Array.from({ length: 32 }, (_, index) => [
+            `provider-${index}`,
+            { name: `Provider ${index}` },
+          ]),
+        ),
+      })["model_providers"],
+    ).toEqual(
+      Object.fromEntries(
+        Array.from({ length: 16 }, (_, index) => [
+          `provider-${index}`,
+          { name: `Provider ${index}` },
+        ]),
+      ),
+    );
     const interpreter =
       Bun.which("python3") ?? Bun.which("python") ?? Bun.which("py");
     expect(interpreter).not.toBeNull();
@@ -480,7 +532,7 @@ describe("CodexSecurity orchestration", () => {
     const client = new TestClient(
       { pythonPath: "/definitely/missing/python" },
       {
-        environment: { OPENAI_API_KEY: "must-not-be-used" },
+        environment: { OPENROUTER_API_KEY: "must-not-be-used" },
         prepareRuntime: async () => {
           runtimeStarted = true;
           throw new Error("runtime should not initialize");
@@ -501,11 +553,11 @@ describe("CodexSecurity orchestration", () => {
       outputDir: output,
       authentication: {
         method: "api_key",
-        source: "OPENAI_API_KEY",
+        source: "OPENROUTER_API_KEY",
         verified: false,
       },
-      model: "gpt-5.6-sol",
-      reasoningEffort: "xhigh",
+      model: "moonshotai/kimi-k3",
+      reasoningEffort: "high",
     });
     await expect(
       client.preflight(repository, { outputDir: join(repository, "scan") }),
@@ -541,7 +593,7 @@ describe("CodexSecurity orchestration", () => {
         },
       },
       {
-        environment: { OPENAI_API_KEY: "must-not-be-used" },
+        environment: { OPENROUTER_API_KEY: "must-not-be-used" },
         prepareRuntime: async () => {
           runtimeStarted = true;
           throw new Error("runtime should not initialize");
@@ -575,7 +627,7 @@ describe("CodexSecurity orchestration", () => {
 
     await expect(
       client.preflight(repository, { maxCostUsd: 5 }),
-    ).resolves.toMatchObject({ model: "gpt-5.6-sol", maxCostUsd: 5 });
+    ).resolves.toMatchObject({ model: "moonshotai/kimi-k3", maxCostUsd: 5 });
     for (const maxCostUsd of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
       await expect(
         client.preflight(repository, { maxCostUsd }),
@@ -606,7 +658,7 @@ describe("CodexSecurity orchestration", () => {
     const client = new TestClient(
       {},
       {
-        environment: { OPENAI_API_KEY: "must-not-be-used" },
+        environment: { OPENROUTER_API_KEY: "must-not-be-used" },
         prepareRuntime: async () => {
           runtimeStarted = true;
           throw new Error("runtime should not initialize");
@@ -655,12 +707,16 @@ describe("CodexSecurity orchestration", () => {
 
     for (const [environment, expected] of [
       [
-        { OPENAI_API_KEY: "synthetic-openai-key", CODEX_API_KEY: "other-key" },
-        { method: "api_key", source: "OPENAI_API_KEY", verified: false },
+        { OPENROUTER_API_KEY: "synthetic-openrouter-key" },
+        { method: "api_key", source: "OPENROUTER_API_KEY", verified: false },
       ],
       [
-        { openai_api_key: "   ", Codex_Api_Key: "synthetic-codex-key" },
-        { method: "api_key", source: "CODEX_API_KEY", verified: false },
+        { OpenRouter_Api_Key: "synthetic-openrouter-key" },
+        { method: "api_key", source: "OPENROUTER_API_KEY", verified: false },
+      ],
+      [
+        { OPENROUTER_API_KEY: "   " },
+        { method: "stored_credentials", verified: false },
       ],
       [{}, { method: "stored_credentials", verified: false }],
     ] as const) {
@@ -695,8 +751,7 @@ describe("CodexSecurity orchestration", () => {
       {},
       {
         environment: {
-          OPENAI_API_KEY: "synthetic-openai-key",
-          CODEX_API_KEY: "synthetic-codex-key",
+          OPENROUTER_API_KEY: "synthetic-openrouter-key",
         },
         prepareRuntime: async () => {
           runtimeStarted = true;
@@ -706,16 +761,11 @@ describe("CodexSecurity orchestration", () => {
     );
 
     await expect(
-      client.preflight(repository, { auth: "chatgpt" }),
-    ).resolves.toMatchObject({
-      authentication: { method: "stored_credentials", verified: false },
-    });
-    await expect(
       client.preflight(repository, { auth: "api-key" }),
     ).resolves.toMatchObject({
       authentication: {
         method: "api_key",
-        source: "OPENAI_API_KEY",
+        source: "OPENROUTER_API_KEY",
         verified: false,
       },
     });
@@ -724,7 +774,7 @@ describe("CodexSecurity orchestration", () => {
     ).resolves.toMatchObject({
       authentication: {
         method: "api_key",
-        source: "OPENAI_API_KEY",
+        source: "OPENROUTER_API_KEY",
         verified: false,
       },
     });
@@ -740,7 +790,7 @@ describe("CodexSecurity orchestration", () => {
     const client = new TestClient(
       {},
       {
-        environment: { OPENAI_API_KEY: "   " },
+        environment: { OPENROUTER_API_KEY: "   " },
         prepareRuntime: async () => {
           runtimeStarted = true;
           throw new Error("runtime should not initialize");
@@ -755,73 +805,6 @@ describe("CodexSecurity orchestration", () => {
       client.run(repository, { auth: "api-key" }),
     ).rejects.toBeInstanceOf(AuthenticationRequiredError);
     expect(runtimeStarted).toBe(false);
-    await client.close();
-  });
-
-  test("removes ambient API keys from explicitly selected ChatGPT scans", async () => {
-    const root = await temporaryDirectory();
-    const repository = join(root, "repository");
-    const codexHome = join(root, "codex-home");
-    const scanDir = join(root, "scan");
-    await mkdir(repository);
-    await mkdir(codexHome);
-    await mkdir(scanDir, { mode: 0o700 });
-    let codexOptions: CodexOptions | null = null;
-    let pythonEnvironment: Record<string, string | undefined> | undefined;
-    let selectedAuthentication: ScanAuthentication | undefined;
-    const client = new TestClient(
-      {},
-      {
-        environment: {
-          OPENAI_API_KEY: "synthetic-openai-key",
-          Codex_Api_Key: "synthetic-codex-key",
-        },
-        prepareRuntime: async () => ({
-          ...preparedRuntime(codexHome),
-          environment: {
-            CODEX_HOME: codexHome,
-            OpenAi_Api_Key: "synthetic-forwarded-openai-key",
-            codex_api_key: "synthetic-forwarded-codex-key",
-          },
-        }),
-        resolvePluginPython: async (options: {
-          environment?: Record<string, string | undefined>;
-        }) => {
-          pythonEnvironment = options.environment;
-          return "/managed/python";
-        },
-        prepareOutputDir: async () => scanDir,
-        repositoryRevision: async () => "deadbeef",
-        createCodex: (options: CodexOptions) => {
-          codexOptions = options;
-          throw new Error("ChatGPT scan reached");
-        },
-      },
-    );
-
-    await expect(
-      client.run(repository, {
-        auth: "chatgpt",
-        onAuthentication: (authentication) => {
-          selectedAuthentication = authentication;
-        },
-      }),
-    ).rejects.toThrow("ChatGPT scan reached");
-    expect(selectedAuthentication).toEqual({
-      method: "stored_credentials",
-      verified: false,
-    });
-    for (const environment of [
-      pythonEnvironment,
-      (codexOptions as CodexOptions | null)?.env,
-    ]) {
-      expect(environment).toBeDefined();
-      expect(
-        Object.keys(environment!).some((name) =>
-          ["OPENAI_API_KEY", "CODEX_API_KEY"].includes(name.toUpperCase()),
-        ),
-      ).toBe(false);
-    }
     await client.close();
   });
 
@@ -1282,7 +1265,7 @@ describe("CodexSecurity orchestration", () => {
     const client = new TestClient(
       { codexOverrides: { model: "replay-model" } },
       {
-        environment: { PATH: "/usr/bin", OPENAI_API_KEY: "" },
+        environment: { PATH: "/usr/bin", OPENROUTER_API_KEY: "" },
         prepareRuntime: async () => ({
           codexHome,
           plugin: {
@@ -1590,12 +1573,12 @@ describe("CodexSecurity orchestration", () => {
     const commands: Array<readonly string[]> = [];
     const costs: number[] = [];
     const cost = {
-      model: "gpt-5.6-sol",
+      model: "moonshotai/kimi-k3",
       inputTokens: 1_250,
       cachedInputTokens: 200,
       cacheWriteInputTokens: 0,
       outputTokens: 30,
-      estimatedUsd: 0.00625,
+      estimatedUsd: 0.00366,
     };
     const client = new TestClient(
       {},
@@ -1672,20 +1655,20 @@ describe("CodexSecurity orchestration", () => {
     try {
       await expect(
         client.run(repository, {
-          maxCostUsd: 0.005,
+          maxCostUsd: 0.003,
           onCost: (cost) => costs.push(cost.estimatedUsd),
           signal: AbortSignal.timeout(5_000),
         }),
       ).rejects.toMatchObject({
         name: ScanCostLimitExceededError.name,
-        maxCostUsd: 0.005,
+        maxCostUsd: 0.003,
         scanDir,
         cost,
       });
     } finally {
       clearTimeout(keepEventLoopAlive);
     }
-    expect(costs.at(-1)).toBe(0.00625);
+    expect(costs.at(-1)).toBe(0.00366);
     expect(commands[1]).toEqual([
       "get-scan-feedback",
       "--scan-id",
@@ -1696,7 +1679,7 @@ describe("CodexSecurity orchestration", () => {
       "--scan-id",
       "scan_example_001",
       "--message",
-      `Scan stopped: estimated cost $0.00625 exceeded the $0.005 limit; partial output remains at ${scanDir}.`,
+      `Scan stopped: estimated cost $0.00366 exceeded the $0.003 limit; partial output remains at ${scanDir}.`,
       "--cost-json",
       JSON.stringify(cost),
     ]);
@@ -2090,7 +2073,10 @@ describe("CodexSecurity orchestration", () => {
         },
       },
       {
-        environment: { CODEX_HOME: ambientHome },
+        environment: {
+          CODEX_HOME: ambientHome,
+          OPENROUTER_API_KEY: "synthetic-openrouter-key",
+        },
         resolvePluginPython: async () => interpreter!,
         prepareOutputDir: async () => scanDir,
         repositoryRevision: async () => "deadbeef",
@@ -2653,7 +2639,7 @@ describe("CodexSecurity orchestration", () => {
     const client = new TestClient(
       {},
       {
-        environment: { OPENAI_API_KEY: "ambient-key" },
+        environment: { OPENROUTER_API_KEY: "ambient-key" },
         prepareRuntime: async () => ({
           codexHome,
           plugin: {
@@ -2674,32 +2660,19 @@ describe("CodexSecurity orchestration", () => {
     );
     await expect(client.account()).resolves.toEqual({
       authenticated: true,
-      details: "Authenticated with an API key.",
+      details: "Authenticated with an API key from OPENROUTER_API_KEY.",
     });
     await client.close();
   });
 
-  test("persists an ambient API key without filtering Codex-owned credentials", async () => {
+  test("forwards the ambient OpenRouter key to the scan without persisting credentials", async () => {
     const root = await temporaryDirectory();
     const repository = join(root, "repository");
     const codexHome = join(root, "codex-home");
-    const fakeCodex = join(root, "codex.mjs");
     const scanDir = join(root, "scan");
     await mkdir(repository);
     await mkdir(codexHome);
     await mkdir(scanDir, { mode: 0o700 });
-    await writeFile(
-      fakeCodex,
-      `
-if (process.argv.slice(2).join(" ") !== "login --with-api-key") {
-  process.exitCode = 2;
-} else {
-  let apiKey = "";
-  for await (const chunk of process.stdin) apiKey += chunk;
-  if (apiKey.trim() !== "ambient-key") process.exitCode = 3;
-}
-`,
-    );
     let codexOptions: CodexOptions | null = null;
     let selectedAuthentication: unknown;
     let pythonEnvironment: Record<string, string | undefined> | undefined;
@@ -2708,9 +2681,8 @@ if (process.argv.slice(2).join(" ") !== "login --with-api-key") {
       {},
       {
         environment: {
-          openai_api_key: "stale-key",
-          OPENAI_API_KEY: "ambient-key",
-          Codex_Api_Key: "secondary-key",
+          openrouter_api_key: "stale-key",
+          OPENROUTER_API_KEY: "ambient-key",
         },
         prepareRuntime: async () => ({
           codexHome,
@@ -2724,14 +2696,9 @@ if (process.argv.slice(2).join(" ") !== "login --with-api-key") {
           },
           environment: {
             CODEX_HOME: codexHome,
-            OpenAi_Api_Key: "forwarded-openai-key",
-            codex_api_key: "forwarded-codex-key",
+            OPENROUTER_API_KEY: "forwarded-openrouter-key",
           },
           credentialsAvailable: false,
-        }),
-        resolveCodexCommand: () => ({
-          command: process.execPath,
-          prefixArgs: [fakeCodex],
         }),
         resolvePluginPython: async (options: {
           environment?: Record<string, string | undefined>;
@@ -2765,7 +2732,7 @@ if (process.argv.slice(2).join(" ") !== "login --with-api-key") {
     });
     expect(selectedAuthentication).toEqual({
       method: "api_key",
-      source: "OPENAI_API_KEY",
+      source: "OPENROUTER_API_KEY",
       verified: false,
     });
     expect((codexOptions as CodexOptions | null)?.apiKey).toBeUndefined();
@@ -2773,129 +2740,13 @@ if (process.argv.slice(2).join(" ") !== "login --with-api-key") {
       (codexOptions as CodexOptions | null)?.codexPathOverride,
     ).toBeUndefined();
     expect((codexOptions as CodexOptions | null)?.env).toMatchObject({
-      OpenAi_Api_Key: "forwarded-openai-key",
-      codex_api_key: "forwarded-codex-key",
+      OPENROUTER_API_KEY: "forwarded-openrouter-key",
     });
     expect(pythonEnvironment).toMatchObject({
-      openai_api_key: "stale-key",
-      OPENAI_API_KEY: "ambient-key",
-      Codex_Api_Key: "secondary-key",
+      openrouter_api_key: "stale-key",
+      OPENROUTER_API_KEY: "ambient-key",
     });
     expect(pythonProtectedRoot).toBe(await realpath(repository));
-    await client.close();
-  });
-
-  test("does not cache an environment key as reusable file authentication", async () => {
-    let imported = false;
-    await expect(
-      initialCredentialsAvailable(
-        { OPENAI_API_KEY: "ambient-key" },
-        "/unreadable/ambient-home",
-        "/isolated-home",
-        async () => {
-          imported = true;
-          throw new Error("ambient auth must not be inspected");
-        },
-      ),
-    ).resolves.toBe(false);
-    expect(imported).toBe(false);
-
-    await expect(
-      initialCredentialsAvailable(
-        { OPENAI_API_KEY: "   " },
-        "/ambient-home",
-        "/isolated-home",
-        async () => true,
-      ),
-    ).resolves.toBe(true);
-  });
-
-  test("restores stored ChatGPT credentials when switching from an API-key scan", async () => {
-    const root = await temporaryDirectory();
-    const repository = join(root, "repository");
-    const ambientHome = join(root, "ambient-home");
-    const codexHome = join(root, "codex-home");
-    const scanDir = join(root, "scan");
-    const fakeCodex = join(root, "codex.mjs");
-    const ambientAuthentication = '{"auth_mode":"chatgpt"}\n';
-    await mkdir(repository);
-    await mkdir(ambientHome);
-    await mkdir(codexHome);
-    await mkdir(scanDir, { mode: 0o700 });
-    await writeFile(join(ambientHome, "auth.json"), ambientAuthentication);
-    await writeFile(
-      fakeCodex,
-      `
-import { writeFileSync } from "node:fs";
-let apiKey = "";
-for await (const chunk of process.stdin) apiKey += chunk;
-writeFileSync(${JSON.stringify(join(codexHome, "auth.json"))}, JSON.stringify({
-  auth_mode: "api-key",
-  configured: apiKey.trim().length > 0,
-}));
-`,
-    );
-    const authentications: ScanAuthentication[] = [];
-    const codexEnvironments: Array<Record<string, string> | undefined> = [];
-    const client = new TestClient(
-      {},
-      {
-        environment: {
-          CODEX_HOME: ambientHome,
-          OPENAI_API_KEY: "synthetic-openai-key",
-        },
-        prepareRuntime: async () => ({
-          ...preparedRuntime(codexHome),
-          credentialsAvailable: false,
-        }),
-        resolveCodexCommand: () => ({
-          command: process.execPath,
-          prefixArgs: [fakeCodex],
-        }),
-        resolvePluginPython: async () => "/managed/python",
-        prepareOutputDir: async () => scanDir,
-        repositoryRevision: async () => "deadbeef",
-        createCodex: (options: CodexOptions) => {
-          codexEnvironments.push(options.env);
-          throw new Error("scan reached");
-        },
-      },
-    );
-
-    await expect(
-      client.run(repository, {
-        onAuthentication: (authentication) => {
-          authentications.push(authentication);
-        },
-      }),
-    ).rejects.toThrow("scan reached");
-    expect(
-      JSON.parse(await readFile(join(codexHome, "auth.json"), "utf8")),
-    ).toEqual({
-      auth_mode: "api-key",
-      configured: true,
-    });
-
-    await expect(
-      client.run(repository, {
-        auth: "chatgpt",
-        onAuthentication: (authentication) => {
-          authentications.push(authentication);
-        },
-      }),
-    ).rejects.toThrow("scan reached");
-    expect(await readFile(join(codexHome, "auth.json"), "utf8")).toBe(
-      ambientAuthentication,
-    );
-    expect(authentications).toEqual([
-      { method: "api_key", source: "OPENAI_API_KEY", verified: false },
-      { method: "stored_credentials", verified: false },
-    ]);
-    expect(
-      Object.keys(codexEnvironments.at(-1) ?? {}).some((name) =>
-        ["OPENAI_API_KEY", "CODEX_API_KEY"].includes(name.toUpperCase()),
-      ),
-    ).toBe(false);
     await client.close();
   });
 
@@ -2903,23 +2754,13 @@ writeFileSync(${JSON.stringify(join(codexHome, "auth.json"))}, JSON.stringify({
     const root = await temporaryDirectory();
     const repository = join(root, "repository");
     const codexHome = join(root, "codex-home");
-    const fakeCodex = join(root, "codex.mjs");
-    const keyLog = join(root, "keys.txt");
     const scanDir = join(root, "scan");
     await mkdir(repository);
     await mkdir(codexHome);
     await mkdir(scanDir, { mode: 0o700 });
-    await writeFile(
-      fakeCodex,
-      `
-import { appendFileSync } from "node:fs";
-let apiKey = "";
-for await (const chunk of process.stdin) apiKey += chunk;
-appendFileSync(${JSON.stringify(keyLog)}, apiKey.trim() + "\\n");
-`,
-    );
+    const pythonKeys: Array<string | undefined> = [];
     const environment: Record<string, string | undefined> = {
-      OPENAI_API_KEY: "first-key",
+      OPENROUTER_API_KEY: "first-key",
     };
     const client = new TestClient(
       {},
@@ -2929,11 +2770,12 @@ appendFileSync(${JSON.stringify(keyLog)}, apiKey.trim() + "\\n");
           ...preparedRuntime(codexHome),
           credentialsAvailable: false,
         }),
-        resolveCodexCommand: () => ({
-          command: process.execPath,
-          prefixArgs: [fakeCodex],
-        }),
-        resolvePluginPython: async () => "/managed/python",
+        resolvePluginPython: async (options: {
+          environment?: Record<string, string | undefined>;
+        }) => {
+          pythonKeys.push(options.environment?.["OPENROUTER_API_KEY"]);
+          return "/managed/python";
+        },
         prepareOutputDir: async () => scanDir,
         repositoryRevision: async () => "deadbeef",
         createCodex: () => {
@@ -2943,10 +2785,10 @@ appendFileSync(${JSON.stringify(keyLog)}, apiKey.trim() + "\\n");
     );
 
     await expect(client.run(repository)).rejects.toThrow("scan reached");
-    environment["OPENAI_API_KEY"] = "second-key";
+    environment["OPENROUTER_API_KEY"] = "second-key";
     await expect(client.run(repository)).rejects.toThrow("scan reached");
 
-    expect(await readFile(keyLog, "utf8")).toBe("first-key\nsecond-key\n");
+    expect(pythonKeys).toEqual(["first-key", "second-key"]);
     await client.close();
   });
 
@@ -2957,7 +2799,7 @@ appendFileSync(${JSON.stringify(keyLog)}, apiKey.trim() + "\\n");
     await mkdir(repository);
     await mkdir(codexHome);
     const environment: Record<string, string | undefined> = {
-      openai_api_key: "ambient-key",
+      openrouter_api_key: "ambient-key",
     };
     const client = new TestClient(
       {},
@@ -2985,7 +2827,7 @@ appendFileSync(${JSON.stringify(keyLog)}, apiKey.trim() + "\\n");
     await expect(client.account()).resolves.toMatchObject({
       authenticated: true,
     });
-    delete environment["openai_api_key"];
+    delete environment["openrouter_api_key"];
     await expect(client.run(repository)).rejects.toBeInstanceOf(
       AuthenticationRequiredError,
     );
@@ -3265,7 +3107,7 @@ appendFileSync(${JSON.stringify(keyLog)}, apiKey.trim() + "\\n");
     const client = new TestClient(
       {},
       {
-        environment: { OPENAI_API_KEY: "ambient-key" },
+        environment: { OPENROUTER_API_KEY: "ambient-key" },
         prepareRuntime: async () => ({
           ...preparedRuntime(codexHome),
           bootstrapWorkspace,
@@ -3363,200 +3205,4 @@ appendFileSync(${JSON.stringify(keyLog)}, apiKey.trim() + "\\n");
     }
   });
 
-  test("cancels interactive login children during close", async () => {
-    const root = await temporaryDirectory();
-    const codexHome = join(root, "codex-home");
-    const fakeCodex = join(root, "codex.mjs");
-    await mkdir(codexHome);
-    await writeFile(
-      fakeCodex,
-      'console.error("Open https://auth.example.test/device");\nconsole.error("User code: ABCD-EFGH");\nsetInterval(() => {}, 1000);\n',
-    );
-    const client = new TestClient(
-      {},
-      {
-        environment: {},
-        prepareRuntime: async () => ({
-          codexHome,
-          plugin: {
-            pluginRoot: PLUGIN_ROOT,
-            marketplaceRoot: PLUGIN_ROOT,
-            installedRoot: PLUGIN_ROOT,
-            marketplaceName: "codex-security-sdk",
-            name: "codex-security",
-            version: "0.1.0",
-          },
-          environment: {},
-          credentialsAvailable: false,
-        }),
-        resolveCodexCommand: () => ({
-          command: process.execPath,
-          prefixArgs: [fakeCodex],
-        }),
-        createCodex: () => {
-          throw new Error("not used");
-        },
-      },
-    );
-    const login = await client.loginChatGPTDeviceCode();
-    expect(login.verificationUrl).toBe("https://auth.example.test/device");
-    expect(login.userCode).toBe("ABCD-EFGH");
-    await client.close();
-    await expect(login.wait()).resolves.toMatchObject({ success: false });
-  });
-
-  test("keeps ambient credentials available after successful ChatGPT login", async () => {
-    const root = await temporaryDirectory();
-    const repository = join(root, "repository");
-    const codexHome = join(root, "codex-home");
-    const fakeCodex = join(root, "codex.mjs");
-    const keyLog = join(root, "api-keys");
-    const scanDir = join(root, "scan");
-    await mkdir(repository);
-    await mkdir(codexHome);
-    await mkdir(scanDir, { mode: 0o700 });
-    await writeFile(
-      fakeCodex,
-      `
-import { appendFileSync } from "node:fs";
-
-const args = process.argv.slice(2).join(" ");
-if (args === "login --with-api-key") {
-  let apiKey = "";
-  for await (const chunk of process.stdin) apiKey += chunk;
-  if (!["secret-key", "ambient-key"].includes(apiKey.trim())) {
-    process.exitCode = 3;
-  } else {
-    appendFileSync(${JSON.stringify(keyLog)}, apiKey);
-  }
-} else if (args === "login") {
-  console.error("Open https://auth.example.test/login");
-} else {
-  process.exitCode = 2;
-}
-`,
-    );
-    let codexOptions: CodexOptions | null = null;
-    const client = new TestClient(
-      {},
-      {
-        environment: { OPENAI_API_KEY: "ambient-key" },
-        prepareRuntime: async () => ({
-          codexHome,
-          plugin: {
-            pluginRoot: PLUGIN_ROOT,
-            marketplaceRoot: PLUGIN_ROOT,
-            installedRoot: PLUGIN_ROOT,
-            marketplaceName: "codex-security-sdk",
-            name: "codex-security",
-            version: "0.1.0",
-          },
-          environment: {
-            ...process.env,
-            CODEX_HOME: codexHome,
-            OPENAI_API_KEY: "ambient-key",
-            CODEX_API_KEY: "secondary-ambient-key",
-          },
-          credentialsAvailable: false,
-        }),
-        resolveCodexCommand: () => ({
-          command: process.execPath,
-          prefixArgs: [fakeCodex],
-        }),
-        resolvePluginPython: async () => "/managed/python",
-        prepareOutputDir: async () => scanDir,
-        repositoryRevision: async () => "deadbeef",
-        createCodex: (options: CodexOptions) => {
-          codexOptions = options;
-          return {
-            startThread: () => ({
-              id: null,
-              async runStreamed() {
-                await copyCompletedScan(root);
-                return { events: completedEvents() };
-              },
-            }),
-          };
-        },
-      },
-    );
-    try {
-      await client.loginApiKey("secret-key");
-      const login = await client.loginChatGPT();
-      await expect(login.wait()).resolves.toMatchObject({ success: true });
-      await client.run(repository);
-      expect((codexOptions as CodexOptions | null)?.apiKey).toBeUndefined();
-      expect((codexOptions as CodexOptions | null)?.env).toMatchObject({
-        OPENAI_API_KEY: "ambient-key",
-        CODEX_API_KEY: "secondary-ambient-key",
-      });
-      expect(await readFile(keyLog, "utf8")).toBe("secret-key\nambient-key\n");
-    } finally {
-      await client.close();
-    }
-  });
-
-  test("aborts and waits for an in-flight API-key login during close", async () => {
-    const root = await temporaryDirectory();
-    const codexHome = join(root, "codex-home");
-    const fakeCodex = join(root, "codex.mjs");
-    const ready = join(root, "ready");
-    await mkdir(codexHome);
-    await writeFile(
-      fakeCodex,
-      `
-import { writeFileSync } from "node:fs";
-process.on("SIGTERM", () => {
-  writeFileSync(${JSON.stringify(join(codexHome, "auth.json"))}, "late write");
-  process.exit(0);
-});
-writeFileSync(${JSON.stringify(ready)}, "ready");
-for await (const _chunk of process.stdin) {}
-setInterval(() => {}, 1000);
-`,
-    );
-    const client = new TestClient(
-      {},
-      {
-        environment: {},
-        prepareRuntime: async () => ({
-          codexHome,
-          plugin: {
-            pluginRoot: PLUGIN_ROOT,
-            marketplaceRoot: PLUGIN_ROOT,
-            installedRoot: PLUGIN_ROOT,
-            marketplaceName: "codex-security-sdk",
-            name: "codex-security",
-            version: "0.1.0",
-          },
-          environment: {},
-          credentialsAvailable: false,
-        }),
-        resolveCodexCommand: () => ({
-          command: process.execPath,
-          prefixArgs: [fakeCodex],
-        }),
-        createCodex: () => {
-          throw new Error("not used");
-        },
-      },
-    );
-    const login = client.loginApiKey("secret-key");
-    void login.catch(() => undefined);
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      const started = await import("node:fs/promises").then(({ stat }) =>
-        stat(ready).catch(() => null),
-      );
-      if (started !== null) break;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    await expect(
-      import("node:fs/promises").then(({ stat }) => stat(ready)),
-    ).resolves.toBeDefined();
-    await client.close();
-    await expect(login).rejects.toThrow();
-    await expect(
-      import("node:fs/promises").then(({ stat }) => stat(codexHome)),
-    ).rejects.toThrow();
-  });
 });
