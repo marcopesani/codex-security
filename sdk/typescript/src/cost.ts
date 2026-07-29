@@ -48,10 +48,7 @@ interface ScanCostSnapshot {
 }
 
 const MODEL_PRICING_NANODOLLARS: Readonly<Record<string, ModelPricing>> = {
-  "gpt-5.6": [5_000, 500, 6_250, 30_000],
-  "gpt-5.6-sol": [5_000, 500, 6_250, 30_000],
-  "gpt-5.6-terra": [2_500, 250, 3_125, 15_000],
-  "gpt-5.6-luna": [1_000, 100, 1_250, 6_000],
+  "moonshotai/kimi-k3": [3_000, 300, 3_000, 15_000],
 };
 
 const COST_POLL_INTERVAL_MS = 100;

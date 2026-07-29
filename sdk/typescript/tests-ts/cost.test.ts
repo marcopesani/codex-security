@@ -70,66 +70,65 @@ async function writeSession(
 }
 
 describe("scan cost", () => {
-  test("uses published GPT-5.6 model rates", () => {
+  test("uses published kimi-k3 model rates", () => {
     const usage = { input_tokens: 1_000_000, output_tokens: 1_000_000 };
 
-    expect(estimateScanCost("gpt-5.6", usage)?.estimatedUsd).toBe(35);
-    expect(estimateScanCost("gpt-5.6-sol", usage)?.estimatedUsd).toBe(35);
-    expect(estimateScanCost("gpt-5.6-terra", usage)?.estimatedUsd).toBe(17.5);
-    expect(estimateScanCost("gpt-5.6-luna", usage)?.estimatedUsd).toBe(7);
+    expect(estimateScanCost("moonshotai/kimi-k3", usage)?.estimatedUsd).toBe(
+      18,
+    );
   });
 
   test("charges cached input at its discounted rate", () => {
     expect(
-      estimateScanCost("gpt-5.6-sol", {
+      estimateScanCost("moonshotai/kimi-k3", {
         input_tokens: 1_250,
         cached_input_tokens: 200,
         output_tokens: 30,
       }),
     ).toEqual({
-      model: "gpt-5.6-sol",
+      model: "moonshotai/kimi-k3",
       inputTokens: 1_250,
       cachedInputTokens: 200,
       cacheWriteInputTokens: 0,
       outputTokens: 30,
-      estimatedUsd: 0.00625,
+      estimatedUsd: 0.00366,
     });
   });
 
-  test("charges GPT-5.6 cache writes at their published rate", () => {
+  test("charges kimi-k3 cache writes at the input rate", () => {
     expect(
-      estimateScanCost("gpt-5.6-sol", {
+      estimateScanCost("moonshotai/kimi-k3", {
         input_tokens: 1_000,
         cached_input_tokens: 100,
         cache_write_input_tokens: 200,
         output_tokens: 10,
       })?.estimatedUsd,
-    ).toBe(0.0051);
+    ).toBe(0.00288);
   });
 
   test("does not double-charge reasoning tokens included in output", () => {
     expect(
-      estimateScanCost("gpt-5.6-sol", {
+      estimateScanCost("moonshotai/kimi-k3", {
         input_tokens: 1_000,
         output_tokens: 10,
         reasoning_output_tokens: 9,
       })?.estimatedUsd,
-    ).toBe(0.0053);
+    ).toBe(0.00315);
   });
 
   test("does not invent prices for unknown models or incomplete usage", () => {
     for (const [model, usage] of [
       ["unknown-model", { input_tokens: 1, output_tokens: 1 }],
-      ["gpt-5.6-sol", null],
-      ["gpt-5.6-sol", {}],
-      ["gpt-5.6-sol", { input_tokens: -1, output_tokens: 1 }],
-      ["gpt-5.6-sol", { input_tokens: 1.5, output_tokens: 1 }],
+      ["moonshotai/kimi-k3", null],
+      ["moonshotai/kimi-k3", {}],
+      ["moonshotai/kimi-k3", { input_tokens: -1, output_tokens: 1 }],
+      ["moonshotai/kimi-k3", { input_tokens: 1.5, output_tokens: 1 }],
       [
-        "gpt-5.6-sol",
+        "moonshotai/kimi-k3",
         { input_tokens: 1, cached_input_tokens: 2, output_tokens: 1 },
       ],
       [
-        "gpt-5.6-sol",
+        "moonshotai/kimi-k3",
         {
           input_tokens: Number.MAX_SAFE_INTEGER,
           output_tokens: Number.MAX_SAFE_INTEGER,
@@ -168,7 +167,7 @@ describe("live scan cost tracking", () => {
     });
     const tracker = new ScanCostTracker({
       codexHome: home,
-      model: "gpt-5.6-sol",
+      model: "moonshotai/kimi-k3",
     });
     tracker.start("scan-thread");
 
@@ -182,12 +181,12 @@ describe("live scan cost tracking", () => {
         total_tokens: 1_265,
       },
       cost: {
-        model: "gpt-5.6-sol",
+        model: "moonshotai/kimi-k3",
         inputTokens: 1_250,
         cachedInputTokens: 150,
         cacheWriteInputTokens: 200,
         outputTokens: 15,
-        estimatedUsd: 0.006275,
+        estimatedUsd: 0.00357,
       },
     });
   });
@@ -200,10 +199,10 @@ describe("live scan cost tracking", () => {
     });
     const tracker = new ScanCostTracker({
       codexHome: home,
-      model: "gpt-5.6-terra",
+      model: "moonshotai/kimi-k3",
     });
     tracker.start("scan-thread");
-    expect((await tracker.refresh()).cost?.estimatedUsd).toBe(0.0004);
+    expect((await tracker.refresh()).cost?.estimatedUsd).toBe(0.00045);
 
     const latest = JSON.stringify({
       type: "event_msg",
@@ -217,12 +216,12 @@ describe("live scan cost tracking", () => {
     await appendFile(path, `${latest}\n${latest}\n`);
 
     expect((await tracker.stop()).cost).toEqual({
-      model: "gpt-5.6-terra",
+      model: "moonshotai/kimi-k3",
       inputTokens: 250,
       cachedInputTokens: 0,
       cacheWriteInputTokens: 0,
       outputTokens: 20,
-      estimatedUsd: 0.000925,
+      estimatedUsd: 0.00105,
     });
   });
 
@@ -236,21 +235,21 @@ describe("live scan cost tracking", () => {
     const updates: number[] = [];
     const tracker = new ScanCostTracker({
       codexHome: home,
-      model: "gpt-5.6-sol",
-      maxCostUsd: 0.005,
+      model: "moonshotai/kimi-k3",
+      maxCostUsd: 0.003,
       onCost: (cost) => updates.push(cost.estimatedUsd),
     });
     tracker.start("scan-thread");
 
     await tracker.stop();
 
-    expect(updates).toEqual([0.00625]);
+    expect(updates).toEqual([0.00366]);
   });
 
   test("falls back to the completed turn when session logs are unavailable", async () => {
     const tracker = new ScanCostTracker({
       codexHome: await codexHome(),
-      model: "gpt-5.6-luna",
+      model: "moonshotai/kimi-k3",
     });
     const usage = { input_tokens: 1_000, output_tokens: 20 };
     tracker.start("scan-thread");
@@ -258,12 +257,12 @@ describe("live scan cost tracking", () => {
     expect(await tracker.stop(usage)).toEqual({
       usage,
       cost: {
-        model: "gpt-5.6-luna",
+        model: "moonshotai/kimi-k3",
         inputTokens: 1_000,
         cachedInputTokens: 0,
         cacheWriteInputTokens: 0,
         outputTokens: 20,
-        estimatedUsd: 0.00112,
+        estimatedUsd: 0.0033,
       },
     });
   });

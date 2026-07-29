@@ -76,7 +76,7 @@ describe("ScanResult", () => {
       scanDir: "/scan",
       threadId: "thread",
       turnResult: {
-        model: "gpt-5.6-sol",
+        model: "moonshotai/kimi-k3",
         usage: {
           input_tokens: 1_250,
           cached_input_tokens: 200,
@@ -85,7 +85,7 @@ describe("ScanResult", () => {
       },
     });
 
-    expect(result.cost?.estimatedUsd).toBe(0.00625);
+    expect(result.cost?.estimatedUsd).toBe(0.00366);
     expect(result.toJSON()["cost"]).toEqual(result.cost);
   });
 

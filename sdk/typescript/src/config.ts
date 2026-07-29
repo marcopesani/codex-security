@@ -23,8 +23,19 @@ export interface ScanModelConfiguration {
 
 export const DEFAULT_CODEX_CONFIG: Readonly<JsonObject> = {
   cli_auth_credentials_store: "file",
-  model: "gpt-5.6-sol",
-  model_reasoning_effort: "xhigh",
+  model: "moonshotai/kimi-k3",
+  model_reasoning_effort: "high",
+  model_provider: "openrouter",
+  model_providers: {
+    openrouter: {
+      name: "OpenRouter",
+      base_url: "https://openrouter.ai/api/v1",
+      env_key: "OPENROUTER_API_KEY",
+      // Codex >= 0.144 only supports the Responses wire API; OpenRouter
+      // serves it at /api/v1/responses.
+      wire_api: "responses",
+    },
+  },
   features: {
     plugins: true,
     goals: true,

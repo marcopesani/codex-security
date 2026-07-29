@@ -44,7 +44,7 @@ describe("Codex configuration", () => {
       },
     });
     expect(merged["agents"]).toBeUndefined();
-    expect(merged["model"]).toBe("gpt-5.6-sol");
+    expect(merged["model"]).toBe("moonshotai/kimi-k3");
     expect(merged["model_reasoning_effort"]).toBe("high");
     expect(merged["windows"]).toEqual({ sandbox: "elevated" });
   });
@@ -92,8 +92,17 @@ describe("Codex configuration", () => {
       },
     });
     expect(await mergedCodexConfig({})).toMatchObject({
-      model: "gpt-5.6-sol",
-      model_reasoning_effort: "xhigh",
+      model: "moonshotai/kimi-k3",
+      model_reasoning_effort: "high",
+      model_provider: "openrouter",
+      model_providers: {
+        openrouter: {
+          name: "OpenRouter",
+          base_url: "https://openrouter.ai/api/v1",
+          env_key: "OPENROUTER_API_KEY",
+          wire_api: "responses",
+        },
+      },
       windows: {
         sandbox: "unelevated",
       },
