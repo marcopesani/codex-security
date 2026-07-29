@@ -1,14 +1,17 @@
 # Contributing
 
-Codex Security is developed in OpenAI's canonical repository and published to
-this repository through a one-way mirror. External pull requests cannot be
-imported into the canonical source.
+This repository is a fork of
+[openai/codex-security](https://github.com/openai/codex-security) that defaults
+to OpenRouter (`moonshotai/kimi-k3`). Contributions belong here unless you are
+intentionally contributing upstream.
 
 ## Report a bug
 
-Search [existing GitHub issues](https://github.com/openai/codex-security/issues)
-before opening a new one. Include the installed CLI or SDK version, operating
-system, reproduction steps, expected behavior, and the observed result.
+Search
+[existing GitHub issues](https://github.com/marcopesani/codex-security/issues)
+before opening a new one. Include the CLI or SDK version (`node ./bin/codex-security.mjs --version`
+after building `sdk/typescript`), operating system, reproduction steps, expected
+behavior, and the observed result.
 
 Remove API keys, access tokens, repository contents, security findings, and
 other sensitive information from public reports. Report security vulnerabilities
@@ -20,11 +23,16 @@ Open a GitHub issue describing the problem, the workflow you want to support,
 and any relevant product behavior. Documentation corrections and safe
 reproduction details are welcome in the issue discussion.
 
-Maintainers review issues and carry accepted changes into the canonical source.
+## Develop locally
 
-## Dependency and release maintenance
+```bash
+git clone https://github.com/marcopesani/codex-security.git
+cd codex-security/sdk/typescript
+pnpm install
+pnpm build
+pnpm lint
+pnpm test
+```
 
-Maintainers update package dependencies and the committed lockfile in the
-canonical repository. The public release workflow installs that locked graph,
-tests the package, and publishes a verified artifact with npm provenance.
-GitHub Actions dependencies are maintained separately in this repository.
+Run the CLI with `node ./bin/codex-security.mjs` after a successful build. Set
+`OPENROUTER_API_KEY` for live scans.

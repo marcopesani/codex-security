@@ -6,8 +6,12 @@ and how to report them.
 
 ## Report a vulnerability in Codex Security
 
-Report vulnerabilities in the CLI, SDK, bundled plugin, scan runtime, or
-published release artifacts privately through
+This repository is a fork of
+[openai/codex-security](https://github.com/openai/codex-security). Report
+vulnerabilities that are specific to this fork privately by contacting the
+maintainers of [marcopesani/codex-security](https://github.com/marcopesani/codex-security)
+(do not open a public issue with exploit details). For vulnerabilities that also
+affect upstream OpenAI Codex Security, prefer
 [OpenAI's Bugcrowd program](https://bugcrowd.com/engagements/openai).
 
 Do not post unpatched vulnerabilities, exploits, credentials, sensitive scan
@@ -16,25 +20,25 @@ issues for ordinary bugs, documentation, and feature requests.
 
 OpenAI's
 [coordinated vulnerability disclosure policy](https://openai.com/policies/coordinated-vulnerability-disclosure-policy/)
-explains the reporting process, confidentiality, and program eligibility.
+explains the upstream reporting process, confidentiality, and program eligibility.
 
 ## Scope and supported versions
 
 This policy applies to:
 
-- The published `@openai/codex-security` package and `codex-security` CLI.
-- The TypeScript SDK, including target selection, authentication,
-  configuration, execution, and result validation.
-- The Codex Security plugin, interpreter, and Codex runtime bundled with an
-  official release.
+- The `codex-security` CLI and TypeScript SDK built from this repository
+  (`sdk/typescript`), including the OpenRouter provider defaults.
+- Target selection, authentication (`OPENROUTER_API_KEY`), configuration,
+  execution, and result validation.
+- The Codex Security plugin, interpreter, and Codex runtime bundled with this
+  fork.
 - Scan output, including manifests, findings, coverage, reports, SARIF, and
   scan history.
-- Official package, build, and release integrity.
+- Build and release integrity for artifacts produced from this fork.
 
-Check that the issue affects the latest published package or the current default
-branch. Include the package version and, when relevant, the commit, plugin
-version, and operating system. If you found the issue in an older version,
-explain whether a supported release is also affected.
+Check that the issue affects the current default branch. Include the commit,
+plugin version, and operating system. If you found the issue in an older
+revision, explain whether `main` is also affected.
 
 ## Threat model
 

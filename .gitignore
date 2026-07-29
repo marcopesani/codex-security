@@ -10,3 +10,4 @@ dist/
 /codex-security.json
 /findings.json
 /*.sarif
+.smoke-fixture/

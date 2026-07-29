@@ -1,21 +1,33 @@
-# Codex Security
+# Codex Security (OpenRouter fork)
 
-`@openai/codex-security` is a CLI and TypeScript SDK for finding, validating, and fixing security vulnerabilities in your code.
-
-**See the [Codex Security Documentation](http://learn.chatgpt.com/docs/security/cli)** for more details.
-
-Scans use [OpenRouter](https://openrouter.ai/) as the model provider, with
+Fork of [openai/codex-security](https://github.com/openai/codex-security) that
+runs scans through [OpenRouter](https://openrouter.ai/) with
 `moonshotai/kimi-k3` as the default model.
+
+This is **not** the published `@openai/codex-security` npm package. Build and
+run it from this repository.
 
 ## Quick start
 
-Requires Node.js 22 or later, Python 3.10 or later, and an OpenRouter API key.
+Requires Node.js 22 or later, Python 3.10 or later, [pnpm](https://pnpm.io/),
+and an OpenRouter API key.
 
 ```bash
-npm install @openai/codex-security
+git clone https://github.com/marcopesani/codex-security.git
+cd codex-security/sdk/typescript
+pnpm install
+pnpm build
+
 export OPENROUTER_API_KEY=...
-npx @openai/codex-security scan .
-npx @openai/codex-security scan . --model moonshotai/kimi-k3 --effort high
+node ./bin/codex-security.mjs scan /path/to/repository
+node ./bin/codex-security.mjs scan /path/to/repository --model moonshotai/kimi-k3 --effort high
+```
+
+Optional: link the local CLI onto your PATH after building:
+
+```bash
+pnpm link --global
+codex-security scan /path/to/repository
 ```
 
 Scan history is stored in the Codex Security workbench state directory. If that
@@ -23,6 +35,9 @@ directory cannot be written, set `CODEX_SECURITY_STATE_DIR` to a writable
 directory outside the repository.
 
 ## TypeScript SDK
+
+After `pnpm build` in `sdk/typescript`, import from the local package (or link
+it into your app):
 
 ```ts
 import { CodexSecurity } from "@openai/codex-security";
@@ -34,4 +49,5 @@ console.log(result.reportPath);
 await security.close();
 ```
 
-For installation, authentication, scan options, and CI setup, see the [official documentation](http://learn.chatgpt.com/docs/security/cli).
+For CLI options, authentication, and the local security model, see
+[sdk/typescript/README.md](sdk/typescript/README.md).

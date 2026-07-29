@@ -1,28 +1,37 @@
-# `@openai/codex-security`
+# Codex Security TypeScript SDK (OpenRouter fork)
 
-Open-source TypeScript SDK and CLI for running Codex Security scans. The
-ESM-only package includes TypeScript declarations, the `codex-security`
-executable, and the matching Codex runtime.
+Open-source TypeScript SDK and CLI for running Codex Security scans through
+[OpenRouter](https://openrouter.ai/). This fork is built from source; it is
+not installed from the published `@openai/codex-security` npm package.
+
+The ESM-only package includes TypeScript declarations, the `codex-security`
+executable, and the matching Codex runtime. Internally the package name remains
+`@openai/codex-security` for compatibility with the upstream layout.
 
 > [!NOTE]
 > This package follows semantic versioning. Its public API may change between
 > minor versions before `1.0.0`.
 
-## Install
+## Build from this repository
+
+Requires Node.js 22 or later, [pnpm](https://pnpm.io/), and Python 3.10 or
+later. If you use Python 3.10, install the `tomli` package. Select another
+interpreter with `--python`, `pythonPath`, or `PYTHON` when needed.
 
 ```bash
-npm install @openai/codex-security
-npx @openai/codex-security --version
+git clone https://github.com/marcopesani/codex-security.git
+cd codex-security/sdk/typescript
+pnpm install
+pnpm build
+node ./bin/codex-security.mjs --version
 ```
 
-The package supports macOS, Linux, and Windows and requires Node.js 22 or
-later. Scanning and exporting findings also require Python 3.10 or later. If
-you use Python 3.10, install the `tomli` package. Select another interpreter
-with `--python`, `pythonPath`, or `PYTHON` when needed.
+Examples below assume your working directory is `sdk/typescript` after a
+successful build. Optionally link the CLI globally with `pnpm link --global`
+and then use `codex-security` instead of `node ./bin/codex-security.mjs`.
 
-When a newer version is available, the CLI shows the update command for your
-installation method. Set `CODEX_SECURITY_NO_UPDATE_NOTICE=1` to hide the
-notice. Notices are also disabled in CI and when stderr is not a terminal.
+Set `CODEX_SECURITY_NO_UPDATE_NOTICE=1` to hide update notices (also disabled
+in CI and when stderr is not a terminal).
 
 ## Run a scan from TypeScript
 
@@ -62,53 +71,53 @@ Set `OPENROUTER_API_KEY` before scanning:
 
 ```bash
 export OPENROUTER_API_KEY=...
-npx @openai/codex-security scan .
+node ./bin/codex-security.mjs scan .
 ```
 
 On Windows, set the API key in PowerShell:
 
 ```powershell
 $env:OPENROUTER_API_KEY = "<your-api-key>"
-npx @openai/codex-security scan C:\code\repository
+node ./bin/codex-security.mjs scan C:\code\repository
 ```
 
 ## CLI
 
 ```bash
-npx @openai/codex-security scan /path/to/repository
-npx @openai/codex-security scan /path/to/repository --model moonshotai/kimi-k3
-npx @openai/codex-security scan /path/to/repository --model moonshotai/kimi-k3 --effort high
-npx @openai/codex-security scan /path/to/repository --path src --path tests
-npx @openai/codex-security scan /path/to/repository --knowledge-base /path/to/threat-models --knowledge-base /path/to/architecture.pdf
-npx @openai/codex-security scan /path/to/repository --diff origin/main --json
-npx @openai/codex-security scan /path/to/repository --output-dir /path/outside/repository/results
-npx @openai/codex-security scan /path/to/repository --output-dir /path/outside/repository/results --archive-existing
-npx @openai/codex-security scan /path/to/repository --dry-run
-npx @openai/codex-security scan /path/to/repository --fail-on-severity high
-npx @openai/codex-security scan /path/to/repository --max-cost 5
-npx @openai/codex-security install-hook
-npx @openai/codex-security bulk-scan
-npx @openai/codex-security bulk-scan --model moonshotai/kimi-k3 --effort high
-npx @openai/codex-security bulk-scan repositories.csv --output-dir /path/outside/repositories/security-scans --workers 4
-npx @openai/codex-security scans list /path/to/repository
-npx @openai/codex-security scans list --scan-root /path/outside/repository/results
-npx @openai/codex-security scans show SCAN_ID
-npx @openai/codex-security scans rerun SCAN_ID
-npx @openai/codex-security scans match PREVIOUS_SCAN_ID CURRENT_SCAN_ID
-npx @openai/codex-security scans match --all
-npx @openai/codex-security scans compare PREVIOUS_SCAN_ID CURRENT_SCAN_ID
-npx @openai/codex-security findings false-positive OCCURRENCE_ID --reason "The route already checks permissions"
-npx @openai/codex-security export /path/outside/repository/results --export-format sarif --output /path/outside/repository/results.sarif
-npx @openai/codex-security export /path/outside/repository/results --export-format csv --output /path/outside/repository/findings.csv
-npx @openai/codex-security export /path/outside/repository/results --export-format json --output /path/outside/repository/findings.json
-npx @openai/codex-security validate /path/outside/repository/findings.json "Possible SQL injection in src/query.ts:42"
-npx @openai/codex-security validate "Possible SQL injection" --effort high
-npx @openai/codex-security patch /path/outside/repository/findings.json "Missing authorization check in src/routes.ts:18"
-npx @openai/codex-security patch "Missing authorization check" --effort high
+node ./bin/codex-security.mjs scan /path/to/repository
+node ./bin/codex-security.mjs scan /path/to/repository --model moonshotai/kimi-k3
+node ./bin/codex-security.mjs scan /path/to/repository --model moonshotai/kimi-k3 --effort high
+node ./bin/codex-security.mjs scan /path/to/repository --path src --path tests
+node ./bin/codex-security.mjs scan /path/to/repository --knowledge-base /path/to/threat-models --knowledge-base /path/to/architecture.pdf
+node ./bin/codex-security.mjs scan /path/to/repository --diff origin/main --json
+node ./bin/codex-security.mjs scan /path/to/repository --output-dir /path/outside/repository/results
+node ./bin/codex-security.mjs scan /path/to/repository --output-dir /path/outside/repository/results --archive-existing
+node ./bin/codex-security.mjs scan /path/to/repository --dry-run
+node ./bin/codex-security.mjs scan /path/to/repository --fail-on-severity high
+node ./bin/codex-security.mjs scan /path/to/repository --max-cost 5
+node ./bin/codex-security.mjs install-hook
+node ./bin/codex-security.mjs bulk-scan
+node ./bin/codex-security.mjs bulk-scan --model moonshotai/kimi-k3 --effort high
+node ./bin/codex-security.mjs bulk-scan repositories.csv --output-dir /path/outside/repositories/security-scans --workers 4
+node ./bin/codex-security.mjs scans list /path/to/repository
+node ./bin/codex-security.mjs scans list --scan-root /path/outside/repository/results
+node ./bin/codex-security.mjs scans show SCAN_ID
+node ./bin/codex-security.mjs scans rerun SCAN_ID
+node ./bin/codex-security.mjs scans match PREVIOUS_SCAN_ID CURRENT_SCAN_ID
+node ./bin/codex-security.mjs scans match --all
+node ./bin/codex-security.mjs scans compare PREVIOUS_SCAN_ID CURRENT_SCAN_ID
+node ./bin/codex-security.mjs findings false-positive OCCURRENCE_ID --reason "The route already checks permissions"
+node ./bin/codex-security.mjs export /path/outside/repository/results --export-format sarif --output /path/outside/repository/results.sarif
+node ./bin/codex-security.mjs export /path/outside/repository/results --export-format csv --output /path/outside/repository/findings.csv
+node ./bin/codex-security.mjs export /path/outside/repository/results --export-format json --output /path/outside/repository/findings.json
+node ./bin/codex-security.mjs validate /path/outside/repository/findings.json "Possible SQL injection in src/query.ts:42"
+node ./bin/codex-security.mjs validate "Possible SQL injection" --effort high
+node ./bin/codex-security.mjs patch /path/outside/repository/findings.json "Missing authorization check in src/routes.ts:18"
+node ./bin/codex-security.mjs patch "Missing authorization check" --effort high
 ```
 
-Run `npx @openai/codex-security --version` for the installed CLI version or
-`npx @openai/codex-security info --json` for the package, bundled plugin, Codex runtime,
+Run `node ./bin/codex-security.mjs --version` for the installed CLI version or
+`node ./bin/codex-security.mjs info --json` for the package, bundled plugin, Codex runtime,
 default model, reasoning effort, and first-scan command. A scan with `--dry-run`
 also reports its effective model and reasoning effort, including `--codex`
 overrides, without starting Codex or contacting the network.
@@ -142,7 +151,7 @@ for a passing policy. Incomplete scans still write the available human or JSON
 result to stdout and a coverage warning to stderr, including in report-only
 mode.
 
-Scans use OpenRouter with `moonshotai/kimi-k3` and extra-high reasoning effort
+Scans use OpenRouter with `moonshotai/kimi-k3` and high reasoning effort
 by default. Use `--model moonshotai/kimi-k3` to set the model explicitly and
 `--effort minimal|low|medium|high|xhigh` to set reasoning effort. Repeat
 `--codex KEY=VALUE` for other Codex settings; existing
@@ -160,17 +169,17 @@ Progress and summaries use stderr; structured scan results remain on stdout.
 
 Each scan records its model, tokens, and estimated cost in its JSON result,
 scan history, and bulk-scan receipt. Estimates use
-[standard API token prices](https://developers.openai.com/api/docs/models/compare),
-including cached input and cache writes; fees and surcharges are not included.
+[OpenRouter model pricing](https://openrouter.ai/moonshotai/kimi-k3),
+including cached input when reported; fees and surcharges are not included.
 
 Use `--max-cost USD` to stop a scan, including its delegated workers, when its
 running cost exceeds the limit. Partial results are preserved. Requests
 already in progress can finish above the limit.
 
-Run `npx @openai/codex-security scan --help` or `npx @openai/codex-security bulk-scan --help`
+Run `node ./bin/codex-security.mjs scan --help` or `node ./bin/codex-security.mjs bulk-scan --help`
 for the complete CLI references.
 
-Sign in with `gh auth login`, then run `npx @openai/codex-security bulk-scan` to discover
+Sign in with `gh auth login`, then run `node ./bin/codex-security.mjs bulk-scan` to discover
 GitHub repositories pushed in the last 90 days. Archived
 repositories and forks are excluded. Search the repository list, select the
 repositories to scan, and confirm before scanning.
@@ -192,7 +201,7 @@ Results remain under `--output-dir`; rerun the same command to resume.
 
 ### Scan history and reruns
 
-`npx @openai/codex-security scans list` lists scans for the current repository. Pass a
+`node ./bin/codex-security.mjs scans list` lists scans for the current repository. Pass a
 repository path to inspect another checkout, `--scan-root DIR` to list scans
 whose artifacts are under a particular root. `scans show SCAN_ID` includes the
 scan configuration, results, coverage, and artifact locations.
@@ -247,7 +256,7 @@ nonzero:
 
 ```bash
 SCAN_ROOT="$(mktemp -d)"
-npx @openai/codex-security scan . \
+node ./bin/codex-security.mjs scan . \
   --diff origin/main \
   --output-dir "$SCAN_ROOT/results" \
   --json \
@@ -265,7 +274,7 @@ document. CSV uses the portable findings columns, marks findings as open, and
 does not include local workbench triage state. The exporter validates the seal
 before writing, accepts `--output -` for stdout, and can use
 `--source-root /path/to/repository` with SARIF to add source-line fingerprints.
-Run `npx @openai/codex-security export --help` for all export options.
+Run `node ./bin/codex-security.mjs export --help` for all export options.
 
 Use `validate` to run the bundled validation skill on candidate findings and
 `patch` to run the bundled fix-finding skill on security issues. Each positional
@@ -322,9 +331,9 @@ the security policy for the full threat model and private reporting process.
 
 ## Documentation and security
 
-- [CLI quickstart](https://developers.openai.com/codex/security/cli)
-- [TypeScript SDK guide](https://developers.openai.com/codex/security/sdk)
-- [GitHub issues](https://github.com/openai/codex-security/issues) for bugs and
+- [Repository README](../../README.md)
+- [GitHub issues](https://github.com/marcopesani/codex-security/issues) for bugs and
   feature requests
-- [Security policy](https://github.com/openai/codex-security/blob/main/SECURITY.md)
-  for private vulnerability reporting and safe operation
+- [Security policy](../../SECURITY.md) for private vulnerability reporting and
+  safe operation
+- Upstream project: [openai/codex-security](https://github.com/openai/codex-security)

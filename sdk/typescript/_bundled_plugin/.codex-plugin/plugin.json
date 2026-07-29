@@ -5,8 +5,8 @@
   "author": {
     "name": "OpenAI"
   },
-  "homepage": "https://developers.openai.com/codex/security",
-  "repository": "https://github.com/openai/codex-security",
+  "homepage": "https://github.com/marcopesani/codex-security",
+  "repository": "https://github.com/marcopesani/codex-security",
   "license": "Apache-2.0",
   "keywords": [
     "security",
